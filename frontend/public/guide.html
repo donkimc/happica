@@ -26,7 +26,9 @@
   main { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
   h1 { font-size: 24px; margin: 0; }
-  h2 { font-size: 18px; margin: 36px 0 10px; scroll-margin-top: 16px; }
+  h2 { font-size: 18px; margin: 36px 0 10px; scroll-margin-top: 16px; counter-increment: section; }
+  h2::before { content: counter(section) ". "; }
+  main { counter-reset: section; }
   h3 { font-size: 15px; margin: 20px 0 6px; }
   p, li { font-size: 15px; }
   a { color: var(--accent); }
@@ -66,6 +68,7 @@
 
   <nav class="toc" aria-label="Contents">
     <ol>
+      <li><a href="#tools">The tools at a glance</a></li>
       <li><a href="#start">Starting and stopping</a></li>
       <li><a href="#first">Your first video</a></li>
       <li><a href="#presets">Presets</a></li>
@@ -74,14 +77,36 @@
       <li><a href="#jobs">Working with results</a></li>
       <li><a href="#tips">Tips for better videos</a></li>
       <li><a href="#speed">How long things take</a></li>
+      <li><a href="#images">Images</a></li>
+      <li><a href="#slides">Slideshow</a></li>
       <li><a href="#music">Music Studio</a></li>
+      <li><a href="#musicvideo">Music Video</a></li>
       <li><a href="#sfx">Sound effects</a></li>
+      <li><a href="#voice">Voiceover</a></li>
+      <li><a href="#characters">Characters</a></li>
       <li><a href="#trouble">Troubleshooting</a></li>
       <li><a href="#files">Where files are</a></li>
     </ol>
   </nav>
 
-  <h2 id="start">1. Starting and stopping</h2>
+  <h2 id="tools">The tools at a glance</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tab</th><th>What it makes</th><th>Works with</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Images</strong></td><td>1–4 pictures from a description, in any style</td><td>Characters; results feed Slideshow</td></tr>
+        <tr><td><strong>Story Video</strong></td><td>A narrated video from lines or a whole story</td><td>Music, Sound FX (ambience), Characters</td></tr>
+        <tr><td><strong>Slideshow</strong></td><td>A video from your own photos or library images</td><td>Images, Music, Sound FX</td></tr>
+        <tr><td><strong>Music</strong></td><td>Songs with lyrics or instrumentals, two takes each</td><td>Feeds Story Video, Slideshow, Music Video</td></tr>
+        <tr><td><strong>Music Video</strong></td><td>Visuals for a song, cut to its exact length</td><td>Music</td></tr>
+        <tr><td><strong>Sound FX</strong></td><td>Effects and seamless ambience loops</td><td>Feeds Story Video and Slideshow ambience</td></tr>
+        <tr><td><strong>Voiceover</strong></td><td>Narration MP3s with subtitles, 54 voices</td><td>—</td></tr>
+        <tr><td><strong>Characters</strong></td><td>A reusable person from one face photo</td><td>Images, Story Video</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="start">Starting and stopping</h2>
   <p>Happica runs four local services: two copies of <strong>ComfyUI</strong> (one for images and video, one for music), the <strong>backend</strong> (the job queue), and this <strong>web app</strong>. One script starts them all:</p>
   <pre><code>cd ~/Project/happica
 scripts/start.sh</code></pre>
@@ -97,7 +122,7 @@ scripts/start.sh</code></pre>
     </ul>
   </div>
 
-  <h2 id="first">2. Your first video</h2>
+  <h2 id="first">Your first video</h2>
   <ol class="steps">
     <li>Click the <strong>Narrated story</strong> preset at the top of the form.</li>
     <li>Type a short story — three or four sentences is plenty. For example: <em>“A curious fox cub leaves its den on the first snowy morning. It chases snowflakes through a birch forest. At night it follows the northern lights home.”</em></li>
@@ -107,7 +132,7 @@ scripts/start.sh</code></pre>
   </ol>
   <p class="note">You can keep using the app while a job runs. Jobs run one at a time — the GPU only fits one — so new jobs wait in a queue.</p>
 
-  <h2 id="presets">3. Presets</h2>
+  <h2 id="presets">Presets</h2>
   <p>Presets set several options at once. The highlighted chip shows which preset your current settings match; change any option afterwards and the highlight goes away.</p>
   <div class="table-wrap">
     <table>
@@ -121,13 +146,13 @@ scripts/start.sh</code></pre>
     </table>
   </div>
 
-  <h2 id="modes">4. Scene modes</h2>
+  <h2 id="modes">Scene modes</h2>
   <h3>One line per scene</h3>
   <p>Each line you type becomes one scene, and the line is used directly as the image description. Use this when you know exactly what each shot should show. If narration is on, the line is also what gets spoken.</p>
   <h3>Story — AI writes the scenes</h3>
   <p>Write in plain prose. A local language model (Ollama) splits it into scenes and writes three things for each: a detailed <em>image prompt</em>, a <em>motion</em> hint for AI motion, and a line of <em>narration</em>. You'll see the narration in quotes under each scene once the job runs.</p>
 
-  <h2 id="settings">5. All the settings</h2>
+  <h2 id="settings">All the settings</h2>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Setting</th><th>What it does</th></tr></thead>
@@ -146,7 +171,7 @@ scripts/start.sh</code></pre>
   </div>
   <p class="note">Your last-used settings are remembered in this browser.</p>
 
-  <h2 id="jobs">6. Working with results</h2>
+  <h2 id="jobs">Working with results</h2>
   <p>Click any video in <strong>History</strong> to open it above the gallery. From there:</p>
   <div class="table-wrap">
     <table>
@@ -164,7 +189,7 @@ scripts/start.sh</code></pre>
   </div>
   <p>Click a scene's image to open it full size. The <strong>Subtitles (.srt)</strong> link under the scenes downloads the captions.</p>
 
-  <h2 id="tips">7. Tips for better videos</h2>
+  <h2 id="tips">Tips for better videos</h2>
   <ul>
     <li><strong>Keep characters consistent.</strong> Each image is generated separately, so describe recurring characters the same way every time (“a red fox cub with a white chest and black paws”). If one scene drifts, use <em>Regenerate</em> with the corrected description.</li>
     <li><strong>Be concrete.</strong> “A wooden rowboat on a misty lake at dawn, soft golden light” beats “a peaceful morning”.</li>
@@ -173,7 +198,7 @@ scripts/start.sh</code></pre>
     <li><strong>Better storyboards:</strong> start with <code>OLLAMA_MODEL=qwen2.5:7b scripts/start.sh</code>. The larger model keeps characters more consistent than the default 3B one.</li>
   </ul>
 
-  <h2 id="speed">8. How long things take</h2>
+  <h2 id="speed">How long things take</h2>
   <p>Measured on an Apple M2 with 16 GB of memory:</p>
   <div class="table-wrap">
     <table>
@@ -189,7 +214,19 @@ scripts/start.sh</code></pre>
   </div>
   <p class="note">AI motion uses most of your Mac's memory. Close other heavy apps while it runs, and expect the fans to spin up.</p>
 
-  <h2 id="music">9. Music Studio</h2>
+  <h2 id="images">Images</h2>
+  <p>Describe a picture, pick a <strong>style</strong> chip (photo, watercolor, anime, oil painting…), a size and how many to make (1–4). Each one is a different variation. <strong>More like this</strong> makes another set; <strong>Download</strong> saves the PNG. Pick a <strong>Character</strong> to put that person in the picture. Everything you make here can be used in a Slideshow.</p>
+  <p class="note">About 25 s to load the model, then ~5 s per image (~10 s with a character, ~15 s at 1024×1024).</p>
+
+  <h2 id="slides">Slideshow</h2>
+  <ol class="steps">
+    <li><strong>+ Add photos</strong> — choose several at once from your Mac or phone (JPEG, PNG, WebP and iPhone HEIC all work). Or <strong>+ From Image library</strong> to pick pictures you made.</li>
+    <li>Reorder with ↑ ↓, remove what you don't want, and optionally write a line of <strong>narration</strong> under each slide. Slides without text stay silent.</li>
+    <li>Set the size, motion (pan &amp; zoom or AI motion), voice, subtitles, music and ambience exactly as in Story Video, then <strong>Generate</strong>.</li>
+  </ol>
+  <p class="note">Photos are cropped to fill the frame — keep the important part near the middle. Narrated slides last as long as their narration; the others use “Seconds per scene”.</p>
+
+  <h2 id="music">Music Studio</h2>
   <p>Open the <strong>Music</strong> tab at the top to make songs — with sung lyrics or instrumental — using ACE-Step 1.5, a local music model. Every song is made in <strong>two takes</strong> so you can pick the better one.</p>
   <h3>Simple — describe it</h3>
   <p>Describe the song in plain words, in any language: <em>“an upbeat indie pop song about riding a bicycle through the city on the first warm day of spring”</em>. Pick a length (and Instrumental if you want no vocals), then:</p>
@@ -223,7 +260,11 @@ scripts/start.sh</code></pre>
   </ul>
   <p class="note">Songs you make here appear in the video form under <strong>Background music → From Music library</strong>.</p>
 
-  <h2 id="sfx">10. Sound effects</h2>
+  <h2 id="musicvideo">Music Video</h2>
+  <p>Pick a song from your Music library (▶ previews it), describe the <strong>visual style</strong>, and choose roughly how many <strong>seconds per scene</strong>. The AI reads the song's lyrics and gives each scene its own lines to illustrate, in order — so the pictures follow the song. The cut matches the song's exact length, and the song plays at full volume. For instrumentals it tells a visual story that fits the mood.</p>
+  <p class="note">A 30-second song with pan &amp; zoom takes about 1.5 minutes. With AI motion, count ~6–7 minutes per scene.</p>
+
+  <h2 id="sfx">Sound effects</h2>
   <p>The <strong>Sound FX</strong> tab makes effects and ambiences from a description — sea waves, a summer night, a Buddhist temple, falling leaves, rain on a window, a door creaking — using Stable Audio 3, a local model made for sound effects. Click a <strong>quick idea</strong> to fill in a description, or write your own.</p>
   <div class="table-wrap">
     <table>
@@ -238,7 +279,20 @@ scripts/start.sh</code></pre>
   <h3>Ambience in videos</h3>
   <p>In the Video tab, <strong>Ambience</strong> adds an environment bed under the whole video, alongside the music: <strong>Auto</strong> describes the setting from your story and makes a seamless loop (about 30 s extra), or pick any sound from your <strong>Sound library</strong>. Like the music, it dips while the narrator speaks. Finished videos can swap both with <strong>Change sound</strong>; <strong>New score</strong> / <strong>New ambience</strong> make a fresh Auto version.</p>
 
-  <h2 id="trouble">11. Troubleshooting</h2>
+  <h2 id="voice">Voiceover</h2>
+  <p>Paste up to about 5,000 characters, pick one of 54 voices (grouped by language) and a speed. Blank lines between paragraphs become longer pauses. You get an MP3 to download and a matching <code>.srt</code> subtitle file. A minute of speech takes only a few seconds to make.</p>
+
+  <h2 id="characters">Characters</h2>
+  <ol class="steps">
+    <li><strong>Upload one clear face photo</strong>, give the character a <strong>name</strong>, choose what they are (woman, man, girl, boy, person), and describe their <strong>look</strong> — hair, eyes, skin, anything distinctive.</li>
+    <li>Tick the consent box: <em>use only photos of yourself, or of people who agreed to it.</em></li>
+    <li><strong>Create character</strong> makes a 4-picture character sheet (about 45 s).</li>
+    <li>Under the character, type a change — or click an idea like <em>as a 70-year-old</em>, <em>as a child</em>, <em>as a medieval knight</em> — and <strong>Create</strong>.</li>
+    <li>Use them elsewhere: pick them as the <strong>Character</strong> in Images, or as the <strong>Main character</strong> in Story Video. In story mode the AI writes them into the story; in line mode, write their name in the lines where they appear.</li>
+  </ol>
+  <p class="note">The face model keeps facial features; the <strong>look</strong> description keeps hair and details consistent when the character is aged or restyled — fill it in. Each picture with a character takes about 10 s more.</p>
+
+  <h2 id="trouble">Troubleshooting</h2>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Problem</th><th>What to do</th></tr></thead>
@@ -254,7 +308,7 @@ scripts/start.sh</code></pre>
     </table>
   </div>
 
-  <h2 id="files">12. Where files are</h2>
+  <h2 id="files">Where files are</h2>
   <p>Everything is stored locally inside the project folder:</p>
   <div class="table-wrap">
     <table>
@@ -266,8 +320,11 @@ scripts/start.sh</code></pre>
         <tr><td><code>outputs/&lt;job&gt;/audio/</code></td><td>Each scene's narration (WAV)</td></tr>
         <tr><td><code>outputs/&lt;song&gt;/v1.mp3</code>, <code>v2.mp3</code></td><td>A song's two takes (also as lossless <code>.flac</code>)</td></tr>
         <tr><td><code>outputs/&lt;sound&gt;/s1.mp3</code>, <code>s2.mp3</code></td><td>A sound effect's takes (also <code>.flac</code>)</td></tr>
+        <tr><td><code>outputs/&lt;images&gt;/image_1.png</code> …</td><td>Pictures from the Images tab and characters</td></tr>
+        <tr><td><code>outputs/&lt;voiceover&gt;/voice.mp3</code></td><td>A voiceover and its <code>voice.srt</code></td></tr>
+        <tr><td><code>outputs/uploads/</code></td><td>Photos you uploaded (slideshows, characters)</td></tr>
         <tr><td><code>outputs/logs/</code></td><td>Logs for troubleshooting</td></tr>
-        <tr><td><code>models/</code></td><td>The AI models (~31 GB)</td></tr>
+        <tr><td><code>models/</code></td><td>The AI models (~32 GB)</td></tr>
       </tbody>
     </table>
   </div>

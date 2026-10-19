@@ -1,6 +1,8 @@
 # Happica
 
-A local text → image → video generator with a music studio. ComfyUI does the generation, a FastAPI backend runs the pipeline and job queue, and a React web UI runs at `localhost:5173`.
+A local AI media studio. ComfyUI does the generation, a FastAPI backend runs the pipeline and job queue, and a React web UI runs at `localhost:5173`.
+
+Tools: **Images** · **Story Video** · **Slideshow** · **Music** (songs with lyrics or instrumentals) · **Music Video** · **Sound FX** · **Voiceover** · **Characters** (a reusable face via PhotoMaker). The in-app guide is at `/guide.html`.
 
 ```
 Web UI (React/Vite :5173) ──► Backend (FastAPI :8000) ──► ComfyUI (:8188)        images, video
@@ -54,6 +56,12 @@ Sound effects (Stable Audio 3 small SFX, 3.5 GB):
 B=https://huggingface.co/Comfy-Org/stable-audio-3/resolve/main
 curl -L -o models/checkpoints/stable_audio_3_small_sfx.safetensors $B/checkpoints/stable_audio_3_small_sfx.safetensors
 curl -L -o models/text_encoders/t5gemma_b_b_ul2.safetensors $B/text_encoders/t5gemma_b_b_ul2.safetensors
+```
+
+Characters (PhotoMaker v1, 0.93 GB):
+
+```bash
+curl -L -o models/photomaker/photomaker-v1.bin https://huggingface.co/TencentARC/PhotoMaker/resolve/main/photomaker-v1.bin
 ```
 
 Narration voices (Kokoro TTS, 354 MB):
