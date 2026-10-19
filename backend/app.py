@@ -12,7 +12,7 @@ import httpx
 import pipeline
 from comfy_client import ComfyClient
 from config import FRONTEND_ORIGIN, MUSIC_COMFY_URL, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR
-from pipeline import music, sfx, songwriter, tts
+from pipeline import images, music, sfx, songwriter, tts
 from jobs import JobRunner, JobStore
 
 comfy = ComfyClient()
@@ -22,6 +22,7 @@ runner = JobRunner(store, {
     "video": lambda job, job_dir, report: pipeline.run(job, job_dir, report, comfy, music_comfy),
     "music": lambda job, job_dir, report: music.run(job, job_dir, report, music_comfy),
     "sfx": lambda job, job_dir, report: sfx.run(job, job_dir, report, music_comfy),  # audio models share the GPU-only instance
+    "image": lambda job, job_dir, report: images.run(job, job_dir, report, comfy),
 })
 
 
@@ -198,6 +199,21 @@ async def draft_song(req: DraftRequest):
         return await songwriter.draft(req.description, req.instrumental, req.duration, await music_options())
     except RuntimeError as e:
         raise HTTPException(503, str(e))
+
+
+class ImageRequest(BaseModel):
+    prompt: str = Field(min_length=2, max_length=1000)
+    style: str = ""
+    width: int = Field(default=768, ge=256, le=1024, multiple_of=64)
+    height: int = Field(default=512, ge=256, le=1024, multiple_of=64)
+    count: int = Field(default=4, ge=1, le=4)
+    image_steps: int = Field(default=4, ge=1, le=8)
+    seed: int | None = None
+
+
+@app.post("/api/images")
+async def create_images(req: ImageRequest):
+    return runner.submit(req.prompt.strip()[:80], req.model_dump(), "image")
 
 
 class SfxRequest(BaseModel):

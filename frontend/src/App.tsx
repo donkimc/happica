@@ -19,10 +19,12 @@ import GenerateForm, { DEFAULTS } from "./GenerateForm";
 import JobDetail from "./JobDetail";
 import JobGallery from "./JobGallery";
 import MusicStudio from "./MusicStudio";
+import ImageStudio from "./ImageStudio";
 import SfxStudio from "./SfxStudio";
 
-type Tab = "video" | "music" | "sfx";
+type Tab = "video" | "image" | "music" | "sfx";
 const TABS: { id: Tab; label: string }[] = [
+  { id: "image", label: "Images" },
   { id: "video", label: "Video" },
   { id: "music", label: "Music" },
   { id: "sfx", label: "Sound FX" },
@@ -103,6 +105,7 @@ export default function App() {
   const videoJobs = jobs.filter((j) => j.kind === "video");
   const musicJobs = jobs.filter((j) => j.kind === "music");
   const sfxJobs = jobs.filter((j) => j.kind === "sfx");
+  const imageJobs = jobs.filter((j) => j.kind === "image");
   const selected = videoJobs.find((j) => j.id === selectedId);
   const switchTab = (t: Tab) => {
     setError(null);
@@ -131,7 +134,16 @@ export default function App() {
         </div>
       </header>
 
-      {tab === "sfx" ? (
+      {tab === "image" ? (
+        <ImageStudio
+          jobs={imageJobs}
+          health={health}
+          upsert={upsert}
+          remove={(id) => setJobs((prev) => prev.filter((j) => j.id !== id))}
+          act={act}
+          error={error}
+        />
+      ) : tab === "sfx" ? (
         <SfxStudio
           jobs={sfxJobs}
           health={health}

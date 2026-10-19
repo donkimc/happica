@@ -10,7 +10,7 @@ from typing import Callable
 from config import DB_PATH, OUTPUTS_DIR
 
 STATES = ("queued", "running", "done", "failed", "cancelled")
-KINDS = ("video", "music", "sfx")
+KINDS = ("video", "music", "sfx", "image")
 
 
 class JobStore:

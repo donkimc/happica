@@ -43,6 +43,14 @@ export interface MusicSettings {
   variations: number;
 }
 
+export interface ImageSettings {
+  prompt: string;
+  style: string;
+  width: number;
+  height: number;
+  count: number;
+}
+
 export interface SfxSettings {
   prompt: string;
   duration: number;
@@ -59,7 +67,7 @@ export interface MusicOptions {
 
 export interface Job {
   id: string;
-  kind: "video" | "music" | "sfx";
+  kind: "video" | "music" | "sfx" | "image";
   prompt: string;
   settings: Partial<JobSettings> & Record<string, unknown>;
   state: JobState;
@@ -138,6 +146,7 @@ export const listVoices = () => fetch("/api/voices").then((r) => json<Voice[]>(r
 export const getMusicOptions = () => fetch("/api/music/options").then((r) => json<MusicOptions>(r));
 export const draftSong = (description: string, instrumental: boolean, duration: number) =>
   post("/api/music/draft", { description, instrumental, duration }).then((r) => json<Partial<MusicSettings>>(r));
+export const createImages = (settings: ImageSettings) => post("/api/images", settings).then((r) => json<Job>(r));
 export const createSfx = (settings: SfxSettings) => post("/api/sfx", settings).then((r) => json<Job>(r));
 export const createMusic = (settings: MusicSettings) => post("/api/music", settings).then((r) => json<Job>(r));
 export const listJobs = () => fetch("/api/jobs").then((r) => json<Job[]>(r));
