@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Health, JobSettings, listVoices, Voice } from "./api";
+import { estimateSeconds, formatDuration, matches, PRESETS } from "./presets";
 
 export const DEFAULTS: JobSettings = {
   width: 768,
@@ -43,8 +44,25 @@ export default function GenerateForm({ prompt, settings, health, onPrompt, onSet
     return acc;
   }, {});
 
+  const sceneCount = llm
+    ? settings.max_scenes
+    : Math.min(settings.max_scenes, prompt.split("\n").filter((l) => l.trim()).length);
+
   return (
     <section className="card" id="generate">
+      <div className="presets" aria-label="Presets">
+        {PRESETS.map((p) => (
+          <button
+            key={p.id}
+            className={`chip ${matches(p, settings) ? "on" : ""}`}
+            title={p.hint}
+            onClick={() => onSettings({ ...settings, ...p.settings })}
+          >
+            {p.name}
+          </button>
+        ))}
+      </div>
+
       <div className="segmented" role="radiogroup" aria-label="How to split into scenes">
         <button
           role="radio"
@@ -158,13 +176,16 @@ export default function GenerateForm({ prompt, settings, health, onPrompt, onSet
             <option value="off">Off</option>
           </select>
         </label>
-        <button disabled={!prompt.trim() || llmUnavailable} onClick={onSubmit}>
-          Generate
-        </button>
+        <div className="generate">
+          <button disabled={!prompt.trim() || llmUnavailable} onClick={onSubmit}>
+            Generate
+          </button>
+          {prompt.trim() && <span className="muted">{formatDuration(estimateSeconds(settings, sceneCount))}</span>}
+        </div>
       </div>
 
       {settings.motion === "ltx" && (
-        <p className="muted">AI motion renders each scene with LTX-Video on your GPU — expect several minutes per scene.</p>
+        <p className="muted">AI motion renders each scene with LTX-Video on your GPU — about 6–7 minutes per scene.</p>
       )}
       {settings.narrate && settings.voice[0] !== "a" && settings.voice[0] !== "b" && (
         <p className="muted">Write the narration in the voice's language — the voice reads whatever text it gets.</p>

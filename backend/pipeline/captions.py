@@ -10,7 +10,11 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 FONT = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
-MAX_CHARS = 42  # per caption chunk, so captions stay short enough to read
+MAX_CHARS = 42  # per caption chunk at 768 px wide; narrower frames get proportionally shorter chunks
+
+
+def max_chars_for(width: int) -> int:
+    return max(16, round(MAX_CHARS * width / 768))
 
 
 @dataclass
@@ -20,10 +24,10 @@ class Cue:
     text: str
 
 
-def chunk(text: str) -> list[str]:
-    """Split into the fewest chunks of at most ~MAX_CHARS, balanced so none is a one-word leftover."""
+def chunk(text: str, max_chars: int = MAX_CHARS) -> list[str]:
+    """Split into the fewest chunks of at most ~max_chars, balanced so none is a one-word leftover."""
     words = text.split()
-    n = max(1, math.ceil(len(text) / MAX_CHARS))
+    n = max(1, math.ceil(len(text) / max_chars))
     target = len(text) / n
     chunks, line = [], ""
     for word in words:
@@ -35,9 +39,9 @@ def chunk(text: str) -> list[str]:
     return chunks + [line] if line else chunks
 
 
-def cues_for(text: str, start: float, duration: float) -> list[Cue]:
+def cues_for(text: str, start: float, duration: float, max_chars: int = MAX_CHARS) -> list[Cue]:
     """Split one narration line into cues, timing each by its share of the characters."""
-    parts = chunk(text)
+    parts = chunk(text, max_chars)
     total = sum(len(p) for p in parts) or 1
     cues, t = [], start
     for p in parts:
@@ -68,10 +72,14 @@ def render_png(text: str, width: int, height: int, out: Path) -> Path:
     """A full-frame transparent image with the caption centred near the bottom."""
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    size = max(16, round(height * 0.055))
-    font = ImageFont.truetype(FONT, size)
-    stroke = max(2, size // 12)
-    x0, y0, x1, y1 = draw.textbbox((0, 0), text, font=font, stroke_width=stroke)
+    size = max(16, round(min(width, height) * 0.055))  # shorter side, so portrait text isn't oversized
+    while True:  # shrink until the line fits with a margin on both sides
+        font = ImageFont.truetype(FONT, size)
+        stroke = max(2, size // 12)
+        x0, y0, x1, y1 = draw.textbbox((0, 0), text, font=font, stroke_width=stroke)
+        if x1 - x0 <= width * 0.92 or size <= 12:
+            break
+        size -= 1
     x = (width - (x1 - x0)) / 2 - x0
     y = height * 0.92 - (y1 - y0) - y0
     draw.text((x, y), text, font=font, fill="white", stroke_width=stroke, stroke_fill="black")

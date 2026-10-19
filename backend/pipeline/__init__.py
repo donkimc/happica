@@ -57,12 +57,12 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
         seed = random.randrange(2**32)
     result["seed"] = seed
 
-    for i, shot in enumerate(shots):
-        on_progress = lambda p, i=i: report("image", (i + p) / len(shots))
-        await image.generate(comfy, shot["prompt"], settings, _paths(job_dir, i)["image"], seed=seed + i, on_progress=on_progress)
-        result["images"].append(_rel(job_dir, _paths(job_dir, i)["image"]))
-        result["seeds"].append(seed + i)
-        report("image", (i + 1) / len(shots), result=result)
+    image_paths = [_paths(job_dir, i)["image"] for i in range(len(shots))]
+    seeds = [seed + i for i in range(len(shots))]
+    await image.generate_batch(comfy, [s["prompt"] for s in shots], settings, image_paths, seeds,
+                               on_progress=lambda p: report("image", p))
+    result.update(images=[_rel(job_dir, p) for p in image_paths], seeds=seeds)
+    report("image", 1.0, result=result)
 
     if settings.get("motion") == "none":
         return result
@@ -131,7 +131,7 @@ async def _assemble(job_dir: Path, settings: dict, result: dict) -> dict:
         narration_track = assemble.mix_narration(audio, starts, LEAD, total, job_dir / "narration.wav")
         if settings.get("subtitles", "off") != "off":
             for i, line in enumerate(result["narration"]):
-                cues += captions.cues_for(line, starts[i] + LEAD, result["speech"][i])
+                cues += captions.cues_for(line, starts[i] + LEAD, result["speech"][i], captions.max_chars_for(settings["width"]))
 
     final = await assemble.finalize(silent, job_dir / "final.mp4", narration_track, cues,
                                     burn=settings.get("subtitles") == "burn",

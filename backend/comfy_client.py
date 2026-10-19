@@ -55,8 +55,10 @@ class ComfyClient:
     async def interrupt(self) -> None:
         await self.http.post("/interrupt")
 
-    async def run(self, workflow: dict, on_progress: Callable[[int, int], None] | None = None) -> dict:
+    async def run(self, workflow: dict, on_progress: Callable[[int, int, str | None], None] | None = None) -> dict:
         """Queue a workflow, wait for it to finish, and return its outputs keyed by node id.
+
+        on_progress(value, total, node_id) fires for every sampler step.
 
         The WebSocket is opened before queueing so no progress events are missed.
         """
@@ -71,7 +73,7 @@ class ComfyClient:
                 if data.get("prompt_id") != prompt_id:
                     continue
                 if msg["type"] == "progress" and on_progress:
-                    on_progress(data["value"], data["max"])
+                    on_progress(data["value"], data["max"], data.get("node"))
                 elif msg["type"] == "executing" and data.get("node") is None:
                     break
                 elif msg["type"] == "execution_error":

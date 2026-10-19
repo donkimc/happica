@@ -94,3 +94,12 @@ label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--t
 select:disabled { opacity: 0.5; }
 .narration { font-size: 12px; font-style: italic; color: var(--text); margin: 4px 0 0; }
 .muted a { color: var(--accent); }
+
+/* Phase 7: presets */
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chip {
+  background: transparent; color: var(--text); border: 1px solid var(--border);
+  border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 500;
+}
+.chip.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.generate { display: flex; align-items: center; gap: 10px; }

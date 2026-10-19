@@ -22,7 +22,7 @@ export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
-  const [settings, setSettings] = useState<JobSettings>(DEFAULTS);
+  const [settings, setSettings] = useState<JobSettings>(loadSettings);
   const [error, setError] = useState<string | null>(null);
   const watching = useRef(new Map<string, () => void>());
 
@@ -49,6 +49,11 @@ export default function App() {
     }
   }, [jobs]);
   useEffect(() => () => watching.current.forEach((close) => close()), []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch {} // private mode or blocked storage: settings just won't be remembered
+  }, [settings]);
 
   function upsert(job: Job) {
     setJobs((prev) => [job, ...prev.filter((j) => j.id !== job.id)].sort((a, b) => b.created - a.created));
@@ -120,6 +125,17 @@ export default function App() {
       </section>
     </main>
   );
+}
+
+const SETTINGS_KEY = "happica.settings";
+
+/** Last-used settings, so a reload doesn't reset the form. */
+function loadSettings(): JobSettings {
+  try {
+    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") };
+  } catch {
+    return DEFAULTS;
+  }
 }
 
 function StatusPill({ health }: { health: Health | null }) {

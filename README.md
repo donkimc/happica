@@ -64,7 +64,7 @@ Then open http://127.0.0.1:5173. Logs go to `outputs/logs/`.
 
 | Step | Time |
 |---|---|
-| Image (SDXL-Turbo, 768×512) | ~6 s (first one ~30 s while the model loads) |
+| Images (SDXL-Turbo, 768×512) | ~25 s to load the model once per job, then ~5 s per image |
 | Story → scenes (qwen2.5:3b) | ~15 s |
 | Narration (Kokoro) | ~5–10 s per scene |
 | Pan & zoom clip | < 1 s |
@@ -97,4 +97,6 @@ ComfyUI starts with two flags that matter on a 16 GB Mac:
 4. ✅ History gallery, re-run (new or same seed), edit & re-run, regenerate a single scene, delete
 5. ✅ AI motion with LTX-Video image-to-video
 6. ✅ Story mode: LLM storyboard (Ollama), Kokoro narration, timed subtitles (burned in, soft track, .srt/.vtt)
-7. Presets and memory tuning for 16 GB
+7. ✅ Presets (Quick preview, Narrated story, Vertical short, Cinematic) with time estimates; all of a job's images in one ComfyUI run; captions sized to the frame
+
+Typical jobs: a 4-scene narrated story with pan & zoom takes about 1.5–2 minutes; with AI motion, about 6–7 minutes per scene.

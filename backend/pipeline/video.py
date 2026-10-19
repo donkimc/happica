@@ -76,7 +76,7 @@ async def ltx(comfy: ComfyClient, image: Path, prompt: str, settings: dict, out_
     wf["sampler"]["inputs"]["noise_seed"] = seed
     wf["save"]["inputs"]["filename_prefix"] = f"happica/{out_path.parent.parent.name}_{out_path.stem}"
 
-    outputs = await comfy.run(wf, lambda value, total: on_progress(value / total))
+    outputs = await comfy.run(wf, lambda value, total, _node: on_progress(value / total))
     files = outputs.get("save", {}).get("images", [])
     if not files:
         raise RuntimeError("LTX-Video finished but returned no video")
