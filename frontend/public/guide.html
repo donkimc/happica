@@ -122,6 +122,14 @@ scripts/start.sh</code></pre>
     </ul>
   </div>
 
+  <h3>Using Happica from anywhere</h3>
+  <p>The studio is also online at your Railway address, protected by a password. The website itself runs on Railway, but all the work still happens on this Mac through a secure Cloudflare tunnel — so the Mac must be on and <code>scripts/start.sh</code> running. While it runs, the Mac won't fall asleep on its own.</p>
+  <ul>
+    <li><strong>Password:</strong> set in the <code>.env</code> file in the project folder (<code>HAPPICA_PASSWORD=…</code>). After changing it, restart <code>scripts/start.sh</code>. Logins last 30 days per browser; <strong>Log out</strong> is in the header.</li>
+    <li><strong>After a restart</strong> the tunnel gets a new address, which <code>start.sh</code> sends to Railway automatically — the website works again within about a minute.</li>
+    <li>Too many wrong passwords pause logins for 15 minutes.</li>
+  </ul>
+
   <h2 id="first">Your first video</h2>
   <ol class="steps">
     <li>Click the <strong>Narrated story</strong> preset at the top of the form.</li>

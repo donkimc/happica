@@ -90,6 +90,19 @@ scripts/start.sh
 
 Then open http://127.0.0.1:5173. Logs go to `outputs/logs/`.
 
+## Online access
+
+```
+Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves the app, proxies /api /ws /outputs)
+                       ──► Cloudflare quick tunnel ──► this Mac: backend :8000 (checks the login)
+```
+
+- First run of `start.sh` creates `.env` (git-ignored) with `HAPPICA_PASSWORD` (random; change it) and `HAPPICA_SECRET`.
+- Every request needs a login session (signed cookie, 30 days); failed logins are rate-limited.
+- With `HAPPICA_ONLINE=1` in `.env`, `start.sh` also starts `cloudflared`, and because a quick tunnel's address changes on every start, writes the new one to the Railway service's `BACKEND_URL` with the Railway CLI (folder linked once with `railway link`). It also runs `caffeinate` so the Mac doesn't idle-sleep.
+- Railway service: root directory `/frontend`, Dockerfile build, `PORT=8080`, watch pattern `/frontend/**`.
+- For a fixed tunnel address, a named Cloudflare tunnel (free account + a domain) or Tailscale Funnel can replace the quick tunnel.
+
 ## Speed on an M2 with 16 GB
 
 | Step | Time |

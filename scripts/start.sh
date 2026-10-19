@@ -39,6 +39,28 @@ COMMON=(--listen 127.0.0.1 --cache-none --fp32-vae --extra-model-paths-config "$
 (cd "$ROOT/frontend" && npm run dev -- --host 127.0.0.1 \
   > "$ROOT/outputs/logs/frontend.log" 2>&1) &
 
+# Online access (HAPPICA_ONLINE=1 in .env): a Cloudflare quick tunnel to the backend. Its address changes on every
+# start, so the new one is written to the Railway web service's BACKEND_URL (Railway redeploys in about a minute).
+if [ "${HAPPICA_ONLINE:-0}" = "1" ]; then
+  CLOUDFLARED="$(command -v cloudflared || echo "$HOME/.local/bin/cloudflared")"
+  "$CLOUDFLARED" tunnel --no-autoupdate --url http://127.0.0.1:8000 > "$ROOT/outputs/logs/tunnel.log" 2>&1 &
+  (
+    for _ in $(seq 1 60); do
+      url="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$ROOT/outputs/logs/tunnel.log" | head -1 || true)"
+      [ -n "$url" ] && break
+      sleep 1
+    done
+    if [ -z "$url" ]; then
+      echo "Tunnel didn't start — see outputs/logs/tunnel.log"
+    elif (cd "$ROOT" && railway variables --set "BACKEND_URL=$url" --service web --environment production > /dev/null); then
+      echo "Online: tunnel $url → Railway updated (the public site works again in about a minute)"
+    else
+      echo "Tunnel is $url but updating Railway failed — run: railway variables --set BACKEND_URL=$url --service web"
+    fi
+  ) &
+  caffeinate -i -w $$ &  # keep the Mac from idle-sleeping while the studio is online
+fi
+
 echo "ComfyUI  → http://127.0.0.1:8188   (log: outputs/logs/comfyui.log)"
 echo "Music    → http://127.0.0.1:8189   (log: outputs/logs/comfyui-music.log)"
 echo "Backend  → http://127.0.0.1:8000   (log: outputs/logs/backend.log)"
