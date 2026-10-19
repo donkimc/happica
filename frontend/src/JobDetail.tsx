@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { isActive, Job, outputUrl } from "./api";
+import { isActive, Job, JobSettings, outputUrl } from "./api";
+import { DEFAULTS } from "./GenerateForm";
+import MusicPicker, { MusicChoice } from "./MusicPicker";
 
 interface Props {
   job: Job;
@@ -8,11 +10,16 @@ interface Props {
   onEdit: () => void;
   onDelete: () => void;
   onRegenerate: (index: number, prompt: string) => void;
+  library: Job[];
+  onChangeMusic: (choice: MusicChoice) => void;
 }
 
-export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, onRegenerate }: Props) {
+export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, onRegenerate, library, onChangeMusic }: Props) {
   const active = isActive(job);
   const result = job.result;
+  const settings = { ...DEFAULTS, ...job.settings } as JobSettings;
+  const [musicOpen, setMusicOpen] = useState(false);
+  const [choice, setChoice] = useState<MusicChoice>(settings);
 
   return (
     <article className="card detail">
@@ -53,10 +60,46 @@ export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, on
               </button>
             )}
             <button className="secondary" onClick={onEdit}>Edit &amp; re-run</button>
+            {result?.video && (
+              <button
+                className="secondary"
+                onClick={() => {
+                  setChoice(settings);
+                  setMusicOpen((o) => !o);
+                }}
+              >
+                Change music
+              </button>
+            )}
             <button className="secondary danger" onClick={onDelete}>Delete</button>
           </>
         )}
       </div>
+
+      {result?.music && settings.music !== "off" && (
+        <p className="muted music-line">
+          ♪ {result.music.title || "Untitled"} — {result.music.source === "auto" ? `scored for this video (${result.music.tags})` : "from your Music library"}
+          {" · "}level {Math.round(settings.music_volume * 100)}%
+        </p>
+      )}
+
+      {musicOpen && !active && (
+        <div className="music-panel">
+          <MusicPicker value={choice} library={library} narrated={!!result?.audio?.length} onChange={(patch) => setChoice((c) => ({ ...c, ...patch }))} />
+          <div className="row tight">
+            <button
+              onClick={() => {
+                onChangeMusic(choice);
+                setMusicOpen(false);
+              }}
+            >
+              {choice.music === "auto" ? "Score & re-mix (~1–2 min)" : "Re-mix (a few seconds)"}
+            </button>
+            <button className="secondary" onClick={() => setMusicOpen(false)}>Cancel</button>
+          </div>
+          <p className="muted">Only the soundtrack changes — images, clips, narration and subtitles stay as they are.</p>
+        </div>
+      )}
 
       {!!result?.images.length && (
         <div className="grid">

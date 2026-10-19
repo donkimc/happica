@@ -52,41 +52,62 @@ def mix_narration(audio: list[Path | None], starts: list[float], lead: float, to
     return out
 
 
-async def finalize(video: Path, out: Path, narration: Path | None = None,
+async def finalize(video: Path, out: Path, total: float, narration: Path | None = None,
                    cues: list[captions.Cue] | None = None, burn: bool = False,
-                   size: tuple[int, int] = (768, 512)) -> Path:
-    """Add the narration track and subtitles (soft track, plus burned in when `burn`)."""
+                   size: tuple[int, int] = (768, 512), music: Path | None = None, music_gain: float = 0.3) -> Path:
+    """Add narration, background music (ducked under the narration) and subtitles.
+
+    Subtitles go in as a soft track, and are also burned into the picture when `burn`.
+    """
     args = ["-i", str(video)]
-    maps = ["-map", "0:v"]
+    graph: list[str] = []
+    video_out, audio_out = "0:v", None
     codec = ["-c:v", "copy"]
     n_inputs = 1
 
     if narration:
         args += ["-i", str(narration)]
-        maps += ["-map", f"{n_inputs}:a"]
-        n_inputs += 1
+        voice, n_inputs = f"{n_inputs}:a", n_inputs + 1
+    if music:
+        args += ["-stream_loop", "-1", "-i", str(music)]  # loop a short track under a long video
+        tune, n_inputs = f"{n_inputs}:a", n_inputs + 1
+        stereo = "aformat=sample_rates=48000:channel_layouts=stereo"
+        graph.append(f"[{tune}]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,{stereo},volume={music_gain:.3f},"
+                     f"afade=t=in:d=1,afade=t=out:st={max(0.0, total - 2):.3f}:d=2[music]")
+        if narration:
+            # Duck: the music drops whenever the narration speaks, then comes back up between lines
+            graph.append(f"[{voice}]{stereo},asplit=2[voice][key]")
+            graph.append("[music][key]sidechaincompress=threshold=0.02:ratio=6:attack=15:release=350[ducked]")
+            graph.append("[voice][ducked]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95[mix]")
+        else:
+            graph.append("[music]alimiter=limit=0.95[mix]")
+        audio_out = "[mix]"
+    elif narration:
+        audio_out = voice
 
     if cues and burn:
         # Overlay one caption image per cue, each enabled only during its time window
         work = out.parent / "captions"
-        chain, prev = [], "[0:v]"
+        prev = "[0:v]"
         for k, cue in enumerate(cues):
             png = captions.render_png(cue.text, *size, work / f"cue_{k:03d}.png")
             args += ["-i", str(png)]
             label = f"[c{k}]"
-            chain.append(f"{prev}[{n_inputs}:v]overlay=enable='between(t,{cue.start:.3f},{cue.end:.3f})'{label}")
+            graph.append(f"{prev}[{n_inputs}:v]overlay=enable='between(t,{cue.start:.3f},{cue.end:.3f})'{label}")
             prev, n_inputs = label, n_inputs + 1
-        args += ["-filter_complex", ";".join(chain)]
-        maps[1] = prev  # replaces "0:v"
+        video_out = prev
         codec = list(ffmpeg.ENCODE)  # a copy: the subtitle and audio options get appended below
 
+    maps = ["-map", video_out]
+    if audio_out:
+        maps += ["-map", audio_out]
+        codec += ["-c:a", "aac", "-b:a", "192k"]
     if cues:  # soft subtitle track too, so players can turn captions on and off
         srt = captions.write_srt(cues, out.with_suffix(".srt"))
         args += ["-i", str(srt)]
         maps += ["-map", f"{n_inputs}:s"]
         codec += ["-c:s", "mov_text"]
-
-    if narration:
-        codec += ["-c:a", "aac", "-b:a", "160k"]
-    await ffmpeg.run(*args, *maps, *codec, str(out))
+    if graph:
+        args += ["-filter_complex", ";".join(graph)]
+    await ffmpeg.run(*args, *maps, *codec, "-t", f"{total:.3f}", str(out))
     return out

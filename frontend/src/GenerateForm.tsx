@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Health, JobSettings, listVoices, Voice } from "./api";
+import { Health, Job, JobSettings, listVoices, Voice } from "./api";
+import MusicPicker from "./MusicPicker";
 import { estimateSeconds, formatDuration, matches, PRESETS } from "./presets";
 
 export const DEFAULTS: JobSettings = {
@@ -13,6 +14,10 @@ export const DEFAULTS: JobSettings = {
   narrate: false,
   voice: "af_heart",
   subtitles: "burn",
+  music: "off",
+  music_track: "",
+  music_title: "",
+  music_volume: 0.3,
 };
 
 const PLACEHOLDERS = {
@@ -24,13 +29,14 @@ interface Props {
   prompt: string;
   settings: JobSettings;
   health: Health | null;
+  library: Job[];
   onPrompt: (p: string) => void;
   onSettings: (s: JobSettings) => void;
   onSubmit: () => void;
   error: string | null;
 }
 
-export default function GenerateForm({ prompt, settings, health, onPrompt, onSettings, onSubmit, error }: Props) {
+export default function GenerateForm({ prompt, settings, health, library, onPrompt, onSettings, onSubmit, error }: Props) {
   const [voices, setVoices] = useState<Voice[]>([]);
   useEffect(() => {
     listVoices().then(setVoices).catch(() => {});
@@ -176,6 +182,11 @@ export default function GenerateForm({ prompt, settings, health, onPrompt, onSet
             <option value="off">Off</option>
           </select>
         </label>
+      </div>
+
+      <MusicPicker value={settings} library={library} narrated={settings.narrate} onChange={set} />
+
+      <div className="row">
         <div className="generate">
           <button disabled={!prompt.trim() || llmUnavailable} onClick={onSubmit}>
             Generate

@@ -19,7 +19,7 @@ comfy = ComfyClient()
 music_comfy = ComfyClient(MUSIC_COMFY_URL)
 store = JobStore()
 runner = JobRunner(store, {
-    "video": lambda job, job_dir, report: pipeline.run(job, job_dir, report, comfy),
+    "video": lambda job, job_dir, report: pipeline.run(job, job_dir, report, comfy, music_comfy),
     "music": lambda job, job_dir, report: music.run(job, job_dir, report, music_comfy),
 })
 
@@ -54,6 +54,18 @@ class JobRequest(BaseModel):
     image_steps: int = Field(default=4, ge=1, le=8)
     video_steps: int = Field(default=8, ge=4, le=30)
     seed: int | None = None
+    music: str = Field(default="off", pattern="^(off|auto|library)$")
+    music_track: str = ""  # a library take's .flac path under outputs/, when music == "library"
+    music_title: str = ""
+    music_volume: float = Field(default=0.3, ge=0, le=1)
+
+
+def _check_music_track(music: str, track: str) -> None:
+    if music != "library":
+        return
+    path = (OUTPUTS_DIR / track).resolve()
+    if not track or path.parent.parent != OUTPUTS_DIR.resolve() or path.suffix != ".flac" or not path.is_file():
+        raise HTTPException(400, "Pick a song from the Music library")
 
 
 @app.get("/api/health")
@@ -86,7 +98,28 @@ async def list_voices():
 
 @app.post("/api/jobs")
 async def create_job(req: JobRequest):
+    _check_music_track(req.music, req.music_track)
     return runner.submit(req.prompt, req.model_dump(exclude={"prompt"}))
+
+
+class MusicChange(BaseModel):
+    music: str = Field(pattern="^(off|auto|library)$")
+    music_track: str = ""
+    music_title: str = ""
+    music_volume: float = Field(default=0.3, ge=0, le=1)
+
+
+@app.post("/api/jobs/{job_id}/music")
+async def change_music(job_id: str, req: MusicChange):
+    """Replace a video's background music or its level and re-mix; images and clips stay as they are."""
+    job = _get_or_404(job_id)
+    _require_idle(job)
+    if job["kind"] != "video" or not (job["result"] or {}).get("video"):
+        raise HTTPException(400, "Only finished videos can change music")
+    _check_music_track(req.music, req.music_track)
+    store.update(job_id, settings={**job["settings"], **req.model_dump()})
+    task = lambda j, job_dir, report: pipeline.change_music(j, job_dir, report, music_comfy)
+    return runner.enqueue(job_id, task, stage="music")
 
 
 @app.get("/api/jobs")
@@ -131,23 +164,13 @@ async def draft_song(req: DraftRequest):
         raise HTTPException(503, str(e))
 
 
-_music_options: dict | None = None
-
-
 @app.get("/api/music/options")
 async def music_options():
     """Keys, time signatures and lyric languages ACE-Step accepts, read from the music instance."""
-    global _music_options
-    if _music_options is None:
-        try:
-            r = await music_comfy.http.get("/object_info/TextEncodeAceStepAudio1.5")
-            spec = r.json()["TextEncodeAceStepAudio1.5"]["input"]["required"]
-        except Exception:
-            raise HTTPException(503, "The music engine isn't running")
-        combo = lambda s: s[1]["options"] if s[0] == "COMBO" else s[0]
-        _music_options = {"keys": combo(spec["keyscale"]), "timesignatures": combo(spec["timesignature"]),
-                          "languages": combo(spec["language"])}
-    return _music_options
+    try:
+        return await music.options(music_comfy)
+    except Exception:
+        raise HTTPException(503, "The music engine isn't running")
 
 
 @app.get("/api/jobs/{job_id}")

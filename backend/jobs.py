@@ -40,8 +40,9 @@ class JobStore:
 
     def update(self, job_id: str, **fields) -> dict:
         fields["updated"] = time.time()
-        if "result" in fields and not isinstance(fields["result"], (str, type(None))):
-            fields["result"] = json.dumps(fields["result"])
+        for key in ("result", "settings"):
+            if key in fields and not isinstance(fields[key], (str, type(None))):
+                fields[key] = json.dumps(fields[key])
         cols = ", ".join(f"{k} = ?" for k in fields)
         self.db.execute(f"UPDATE jobs SET {cols} WHERE id = ?", (*fields.values(), job_id))
         self.db.commit()

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   cancelJob,
+  changeMusic,
   createJob,
   deleteJob,
   getHealth,
@@ -138,6 +139,7 @@ export default function App() {
         prompt={prompt}
         settings={settings}
         health={health}
+        library={musicJobs}
         onPrompt={setPrompt}
         onSettings={setSettings}
         onSubmit={() => act(async () => select(await createJob(prompt, settings)))}
@@ -146,6 +148,7 @@ export default function App() {
 
       {selected && (
         <JobDetail
+          key={selected.id}
           job={selected}
           onCancel={() => act(async () => upsert(await cancelJob(selected.id)))}
           onRerun={(keepSeed) => act(async () => select(await rerunJob(selected.id, keepSeed)))}
@@ -167,6 +170,8 @@ export default function App() {
             })
           }
           onRegenerate={(index, p) => act(async () => upsert(await regenerateScene(selected.id, index, p)))}
+          library={musicJobs}
+          onChangeMusic={(choice) => act(async () => upsert(await changeMusic(selected.id, choice)))}
         />
       )}
 

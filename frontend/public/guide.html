@@ -138,6 +138,7 @@ scripts/start.sh</code></pre>
         <tr><td>Seconds per scene</td><td>How long each scene lasts. With narration on this becomes a minimum: scenes stretch to fit their voiceover.</td></tr>
         <tr><td>Narration</td><td>Speaks each scene's narration with Kokoro, a local voice model.</td></tr>
         <tr><td>Voice</td><td>54 voices in 9 languages, grouped by language. The voice reads whatever text it gets, so write the story in the voice's language.</td></tr>
+        <tr><td>Background music</td><td><strong>Off</strong>. <strong>Auto</strong> — the AI reads your story, picks a fitting style and composes an instrumental exactly as long as the video (adds about 1–2 minutes). <strong>From Music library</strong> — any song you made in the Music tab; short songs loop, long ones are trimmed, and both fade in and out. The <strong>music level</strong> is relative to the voice: while the narrator speaks the music automatically dips (“ducking”), and comes back up between lines.</td></tr>
         <tr><td>Subtitles</td><td><strong>Burned in</strong> — drawn onto the picture, always visible (best for social media). <strong>Toggleable track</strong> — a subtitle track viewers can switch on and off. <strong>Off</strong>. Both on-options also give you a downloadable <code>.srt</code> file.</td></tr>
       </tbody>
     </table>
@@ -154,6 +155,7 @@ scripts/start.sh</code></pre>
         <tr><td><strong>Re-run</strong></td><td>Makes a new video from the same text and settings with new seeds — different images.</td></tr>
         <tr><td><strong>Re-run, same seed</strong></td><td>Reproduces the same images exactly. Handy after changing nothing but, say, the voice.</td></tr>
         <tr><td><strong>Edit &amp; re-run</strong></td><td>Loads the text and settings back into the form so you can tweak them and generate again.</td></tr>
+        <tr><td><strong>Change music</strong></td><td>Swap the background music (Off, Auto, or a library song) or change its level. Only the soundtrack is rebuilt — a few seconds for a library song, 1–2 minutes for a new Auto score. The line under the video shows which music is playing.</td></tr>
         <tr><td><strong>Delete</strong></td><td>Removes the job and all its files.</td></tr>
         <tr><td><strong>Cancel</strong></td><td>Stops a queued or running job.</td></tr>
       </tbody>
@@ -218,7 +220,7 @@ scripts/start.sh</code></pre>
     <li>Songs are mastered to streaming loudness (−14 LUFS), trimmed of trailing silence and faded out at the end.</li>
     <li><strong>Re-run</strong> makes two new takes with the same settings; <strong>Edit &amp; re-run</strong> loads them into the form.</li>
   </ul>
-  <p class="note">Coming next: background music for your videos.</p>
+  <p class="note">Songs you make here appear in the video form under <strong>Background music → From Music library</strong>.</p>
 
   <h2 id="trouble">10. Troubleshooting</h2>
   <div class="table-wrap">

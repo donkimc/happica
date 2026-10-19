@@ -7,9 +7,11 @@ export interface JobResult {
   durations?: number[];
   subtitles?: string | null;
   subtitles_vtt?: string | null;
+  music?: { source: "auto" | "library"; track: string; mp3?: string; title: string; tags?: string } | null;
   seeds?: (number | null)[];
   images: string[];
   clips: string[];
+  audio?: string[];
   video: string | null;
   seed?: number;
 }
@@ -88,6 +90,10 @@ export interface JobSettings {
   narrate: boolean;
   voice: string;
   subtitles: "off" | "soft" | "burn";
+  music: "off" | "auto" | "library";
+  music_track: string;
+  music_title: string;
+  music_volume: number;
 }
 
 export const isActive = (job: Job) => job.state === "queued" || job.state === "running";
@@ -128,6 +134,8 @@ export const rerunJob = (id: string, keepSeed = false) =>
   post(`/api/jobs/${id}/rerun`, { keep_seed: keepSeed }).then((r) => json<Job>(r));
 export const regenerateScene = (id: string, index: number, prompt?: string) =>
   post(`/api/jobs/${id}/scenes/${index}/regenerate`, { prompt: prompt || null }).then((r) => json<Job>(r));
+export const changeMusic = (id: string, choice: Pick<JobSettings, "music" | "music_track" | "music_title" | "music_volume">) =>
+  post(`/api/jobs/${id}/music`, choice).then((r) => json<Job>(r));
 export const deleteJob = (id: string) => fetch(`/api/jobs/${id}`, { method: "DELETE" }).then((r) => json(r));
 
 /** Stream live updates for one job; returns a function that closes the socket. */

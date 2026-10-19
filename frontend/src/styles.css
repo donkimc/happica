@@ -143,3 +143,10 @@ pre.lyrics { white-space: pre-wrap; font-size: 13px; background: var(--bg); bord
   padding: 8px 12px; margin-bottom: 12px; font-size: 13px;
 }
 button.secondary.inline { margin-top: 0; }
+
+/* Background music */
+.music-picker { align-items: flex-end; }
+label.volume { min-width: 180px; }
+label.volume input { width: 100%; padding: 0; }
+.music-line { margin: 8px 0 0; }
+.music-panel { border: 1px solid var(--border); border-radius: 10px; padding: 4px 12px 10px; margin-top: 10px; }

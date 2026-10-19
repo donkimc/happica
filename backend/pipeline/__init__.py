@@ -2,14 +2,17 @@
 
 Each stage is its own module. Partial results are reported as they appear, so a job that
 fails late still shows what it made. With narration on, each scene lasts at least as long as
-its voiceover, and subtitles are timed to the speech.
+its voiceover, and subtitles are timed to the speech. Background music is either scored for the
+story (auto) or taken from the Music Studio library, and ducked under the narration.
 """
+import math
 import random
 from pathlib import Path
 
 from comfy_client import ComfyClient
+from config import OUTPUTS_DIR
 
-from . import assemble, captions, image, scenes, tts, video
+from . import assemble, captions, image, music, scenes, songwriter, tts, video
 
 LEAD = 0.35  # narration starts this long after its scene appears
 TAIL = 0.4   # breathing room after the narration before the next scene's crossfade
@@ -29,7 +32,7 @@ def _video_prompt(shot: dict) -> str:
     return f"{shot['prompt']}. {shot['motion']}" if shot.get("motion") else shot["prompt"]
 
 
-async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
+async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy: ComfyClient) -> dict:
     settings = job["settings"]
     fade = settings.get("fade", 0.5)
     result: dict = {"scenes": [], "narration": [], "motion": [], "seeds": [], "durations": [],
@@ -79,6 +82,7 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
         result["clips"].append(_rel(job_dir, p["clip"]))
         report("video", (i + 1) / len(shots), result=result)
 
+    result["music"] = await _pick_music(job, job_dir, result, report, music_comfy)
     report("assemble", 0.0)
     result.update(await _assemble(job_dir, settings, result))
     return result
@@ -116,26 +120,81 @@ async def regenerate_scene(job: dict, job_dir: Path, report, comfy: ComfyClient,
     return result
 
 
+async def change_music(job: dict, job_dir: Path, report, music_comfy: ComfyClient) -> dict:
+    """Swap a finished video's background music (settings already updated) and re-mix; no images or clips are redone."""
+    result = dict(job["result"])
+    result["music"] = await _pick_music(job, job_dir, result, report, music_comfy)
+    report("assemble", 0.0)
+    result.update(await _assemble(job_dir, job["settings"], result))
+    return result
+
+
+def _total(settings: dict, result: dict) -> float:
+    n = len(result["scenes"])
+    fade = settings.get("fade", 0.5)
+    durations = result.get("durations") or [settings.get("clip_seconds", 3)] * n
+    starts = assemble.scene_starts(durations, fade)
+    return starts[-1] + durations[-1]
+
+
+async def _pick_music(job: dict, job_dir: Path, result: dict, report, music_comfy: ComfyClient) -> dict | None:
+    """The background track for this video: none, a library song, or a new instrumental scored for the story."""
+    settings = job["settings"]
+    choice = settings.get("music", "off")
+    if choice == "library":
+        track = settings.get("music_track") or ""
+        if not (OUTPUTS_DIR / track).is_file():
+            raise RuntimeError("The chosen library song no longer exists — pick another in Change music.")
+        return {"source": "library", "track": track, "title": settings.get("music_title", "")}
+    if choice != "auto":
+        return None
+
+    total = _total(settings, result)
+    report("music: choosing a style", 0.0)
+    story = job["prompt"] if settings.get("scene_mode") == "llm" else " / ".join(result["scenes"])
+    narration = " ".join(result.get("narration") or [])
+    brief = (f"Instrumental background score for a short narrated video. It must support the voiceover, not compete "
+             f"with it: no vocals, gentle dynamics. Story: {story[:800]}" + (f" Narration: {narration[:600]}" if narration else ""))
+    draft = await songwriter.draft(brief, True, total, await music.options(music_comfy))
+    score = {"tags": draft["tags"], "bpm": draft["bpm"], "keyscale": draft["keyscale"],
+             "timesignature": draft["timesignature"], "instrumental": True, "lyrics": "", "language": "en",
+             # ACE-Step makes 10–240 s; a little extra so the fade-out lands on music, and loops cover longer videos
+             "duration": min(240, max(10, math.ceil(total) + 2))}
+    tracks = await music.generate(music_comfy, score, job_dir / "music", f"{job_dir.name}_score",
+                                  [random.randrange(2**31)], lambda stage, p: report(f"music: {stage}", p))
+    return {"source": "auto", "track": tracks[0]["flac"], "mp3": tracks[0]["mp3"], "title": draft["title"],
+            "tags": draft["tags"]}
+
+
+def music_gain(settings: dict, narrated: bool) -> float:
+    """The music level slider (0–1) is relative to the voice. Without narration the music is the only sound,
+    so the same slider position plays it louder (the default 0.3 becomes 0.75)."""
+    level = settings.get("music_volume", 0.3)
+    return level if narrated else min(1.0, level * 2.5)
+
+
 async def _assemble(job_dir: Path, settings: dict, result: dict) -> dict:
     n = len(result["scenes"])
     fade = settings.get("fade", 0.5)
     durations = result.get("durations") or [settings.get("clip_seconds", 3)] * n
     clips = [_paths(job_dir, i)["clip"] for i in range(n)]
     silent = await assemble.concat(clips, durations, job_dir / "video_only.mp4", fade)
+    total = _total(settings, result)
 
     narration_track, cues = None, []
     if result.get("audio"):
         starts = assemble.scene_starts(durations, fade)
-        total = starts[-1] + durations[-1]
         audio = [_paths(job_dir, i)["audio"] for i in range(n)]
         narration_track = assemble.mix_narration(audio, starts, LEAD, total, job_dir / "narration.wav")
         if settings.get("subtitles", "off") != "off":
             for i, line in enumerate(result["narration"]):
                 cues += captions.cues_for(line, starts[i] + LEAD, result["speech"][i], captions.max_chars_for(settings["width"]))
 
-    final = await assemble.finalize(silent, job_dir / "final.mp4", narration_track, cues,
+    track = result.get("music") and settings.get("music", "off") != "off" and OUTPUTS_DIR / result["music"]["track"]
+    final = await assemble.finalize(silent, job_dir / "final.mp4", total, narration_track, cues,
                                     burn=settings.get("subtitles") == "burn",
-                                    size=(settings["width"], settings["height"]))
+                                    size=(settings["width"], settings["height"]),
+                                    music=track or None, music_gain=music_gain(settings, bool(narration_track)))
     silent.unlink()
     if not cues:
         return {"video": _rel(job_dir, final), "subtitles": None, "subtitles_vtt": None}

@@ -48,6 +48,10 @@ export function estimateSeconds(s: JobSettings, sceneCount: number): number {
   if (s.narrate) t += 7 * n;
   if (s.motion === "kenburns") t += n;
   if (s.motion === "ltx") t += 390 * n * Math.max(1, s.clip_seconds / 3);
+  if (s.music === "auto" && s.motion !== "none") {
+    const videoSeconds = n * (s.narrate ? Math.max(s.clip_seconds, 6) : s.clip_seconds);
+    t += 15 + 35 + videoSeconds * 1.2; // style from the LLM, then one ACE-Step take
+  }
   return t;
 }
 

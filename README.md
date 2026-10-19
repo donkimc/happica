@@ -123,5 +123,5 @@ Typical jobs: a 4-scene narrated story with pan & zoom takes about 1.5–2 minut
 1. ✅ M1 — ACE-Step 1.5 workflow, benchmarked and tuned for the M2
 2. ✅ M2 — Music Studio tab: style tags, lyrics editor, instrumental, 2 takes, library with waveform players
 3. ✅ M3 — Simple mode: describe a song; qwen2.5:7b drafts title, tags, lyrics (sized to the length) and BPM/key/language for review, or creates directly
-4. M4 — Background music in videos: auto or from the library, ducked under narration
+4. ✅ M4 — Background music in videos: Off / Auto (LLM picks a style from the story, ACE-Step scores the exact length) / From library; looped or trimmed, faded, sidechain-ducked under narration, level control; Change music re-mixes a finished video
 5. M5 — Polish: guide, presets with music

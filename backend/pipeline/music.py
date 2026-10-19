@@ -13,7 +13,7 @@ import numpy as np
 import soundfile as sf
 
 from comfy_client import ComfyClient
-from config import WORKFLOWS_DIR
+from config import OUTPUTS_DIR, WORKFLOWS_DIR
 
 from . import ffmpeg
 
@@ -81,14 +81,10 @@ async def _master(raw: Path, out_flac: Path, out_mp3: Path) -> float:
     return duration
 
 
-async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
-    settings = job["settings"]
-    n = settings.get("variations", 2)
-    seed = settings.get("seed")
-    if seed is None:
-        seed = random.randrange(2**31)
-    seeds = [seed + i for i in range(n)]
-
+async def generate(comfy: ComfyClient, settings: dict, out_dir: Path, name: str, seeds: list[int],
+                   report=lambda stage, progress: None) -> list[dict]:
+    """Make one track per seed into out_dir (v1.flac/.mp3, v2…); paths in the result are relative to OUTPUTS_DIR."""
+    n = len(seeds)
     progress: dict[int, float] = {}
 
     def on_progress(value: int, total: int, node: str | None):
@@ -102,21 +98,47 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
         report(STAGES[kind], sum(progress.values()) / n)
 
     report("loading models", 0.0)
-    outputs = await comfy.run(_workflow(settings, seeds, job["id"]), on_progress)
+    outputs = await comfy.run(_workflow(settings, seeds, name), on_progress)
 
     report("mastering", 0.95)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rel = lambda p: str(p.relative_to(OUTPUTS_DIR))
     tracks = []
     for i in range(n):
         files = outputs.get(f"save_{i}", {}).get("audio", [])
         if not files:
             raise RuntimeError(f"ACE-Step returned no audio for variation {i + 1}")
         f = files[0]
-        raw = job_dir / f"v{i + 1}.raw.flac"
+        raw = out_dir / f"v{i + 1}.raw.flac"
         raw.write_bytes(await comfy.download(f["filename"], f["subfolder"], f["type"]))
-        flac, mp3 = job_dir / f"v{i + 1}.flac", job_dir / f"v{i + 1}.mp3"
+        flac, mp3 = out_dir / f"v{i + 1}.flac", out_dir / f"v{i + 1}.mp3"
         duration = await _master(raw, flac, mp3)
-        tracks.append({
-            "mp3": str(mp3.relative_to(job_dir.parent)), "flac": str(flac.relative_to(job_dir.parent)),
-            "duration": round(duration, 2), "seed": seeds[i], "peaks": await asyncio.to_thread(_peaks, flac),
-        })
-    return {"tracks": tracks, "seed": seed}
+        tracks.append({"mp3": rel(mp3), "flac": rel(flac), "duration": round(duration, 2), "seed": seeds[i],
+                       "peaks": await asyncio.to_thread(_peaks, flac)})
+    return tracks
+
+
+async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
+    """A Music Studio job: 1–2 takes of a song."""
+    settings = job["settings"]
+    seed = settings.get("seed")
+    if seed is None:
+        seed = random.randrange(2**31)
+    seeds = [seed + i for i in range(settings.get("variations", 2))]
+    return {"tracks": await generate(comfy, settings, job_dir, job["id"], seeds, report), "seed": seed}
+
+
+_options: dict | None = None
+
+
+async def options(comfy: ComfyClient) -> dict:
+    """Keys, time signatures and lyric languages ACE-Step accepts, read once from the music instance."""
+    global _options
+    if _options is None:
+        r = await comfy.http.get("/object_info/TextEncodeAceStepAudio1.5")
+        r.raise_for_status()
+        spec = r.json()["TextEncodeAceStepAudio1.5"]["input"]["required"]
+        combo = lambda s: s[1]["options"] if s[0] == "COMBO" else s[0]
+        _options = {"keys": combo(spec["keyscale"]), "timesignatures": combo(spec["timesignature"]),
+                    "languages": combo(spec["language"])}
+    return _options
