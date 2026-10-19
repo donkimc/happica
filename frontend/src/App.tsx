@@ -16,6 +16,10 @@ import {
 import GenerateForm, { DEFAULTS } from "./GenerateForm";
 import JobDetail from "./JobDetail";
 import JobGallery from "./JobGallery";
+import MusicStudio from "./MusicStudio";
+
+type Tab = "video" | "music";
+const tabFromHash = (): Tab => (location.hash === "#music" ? "music" : "video");
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -24,7 +28,22 @@ export default function App() {
   const [prompt, setPrompt] = useState("");
   const [settings, setSettings] = useState<JobSettings>(loadSettings);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>(tabFromHash);
   const watching = useRef(new Map<string, () => void>());
+
+  useEffect(() => {
+    const onHash = () => setTab(tabFromHash());
+    addEventListener("hashchange", onHash);
+    return () => removeEventListener("hashchange", onHash);
+  }, []);
+
+  // Only one song plays at a time: starting any <audio> or <video> pauses the others
+  useEffect(() => {
+    const onPlay = (e: Event) =>
+      document.querySelectorAll<HTMLMediaElement>("audio, video").forEach((m) => m !== e.target && m.pause());
+    document.addEventListener("play", onPlay, true);
+    return () => document.removeEventListener("play", onPlay, true);
+  }, []);
 
   useEffect(() => {
     const poll = () => getHealth().then(setHealth).catch(() => setHealth(null));
@@ -33,7 +52,7 @@ export default function App() {
     listJobs()
       .then((list) => {
         setJobs(list);
-        setSelectedId((id) => id ?? list[0]?.id ?? null);
+        setSelectedId((id) => id ?? list.find((j) => j.kind === "video")?.id ?? null);
       })
       .catch(() => {});
     return () => clearInterval(t);
@@ -73,12 +92,29 @@ export default function App() {
     setSelectedId(job.id);
   };
 
-  const selected = jobs.find((j) => j.id === selectedId);
+  const videoJobs = jobs.filter((j) => j.kind === "video");
+  const musicJobs = jobs.filter((j) => j.kind === "music");
+  const selected = videoJobs.find((j) => j.id === selectedId);
+  const switchTab = (t: Tab) => {
+    setError(null);
+    setTab(t);
+    history.replaceState(null, "", t === "music" ? "#music" : location.pathname);
+  };
 
   return (
     <main>
       <header>
-        <h1>Happica</h1>
+        <div className="brand">
+          <h1>Happica</h1>
+          <nav className="tabs" aria-label="Studio">
+            <button className={tab === "video" ? "on" : ""} aria-current={tab === "video"} onClick={() => switchTab("video")}>
+              Video
+            </button>
+            <button className={tab === "music" ? "on" : ""} aria-current={tab === "music"} onClick={() => switchTab("music")}>
+              Music
+            </button>
+          </nav>
+        </div>
         <div className="header-right">
           <a className="guide-link" href="/guide.html" target="_blank" rel="noreferrer">
             How to use
@@ -87,6 +123,17 @@ export default function App() {
         </div>
       </header>
 
+      {tab === "music" ? (
+        <MusicStudio
+          jobs={musicJobs}
+          health={health}
+          upsert={upsert}
+          remove={(id) => setJobs((prev) => prev.filter((j) => j.id !== id))}
+          act={act}
+          error={error}
+        />
+      ) : (
+      <>
       <GenerateForm
         prompt={prompt}
         settings={settings}
@@ -115,9 +162,8 @@ export default function App() {
             confirm("Delete this job and its files?") &&
             act(async () => {
               await deleteJob(selected.id);
-              const rest = jobs.filter((j) => j.id !== selected.id);
-              setJobs(rest);
-              setSelectedId(rest[0]?.id ?? null);
+              setJobs((prev) => prev.filter((j) => j.id !== selected.id));
+              setSelectedId(videoJobs.find((j) => j.id !== selected.id)?.id ?? null);
             })
           }
           onRegenerate={(index, p) => act(async () => upsert(await regenerateScene(selected.id, index, p)))}
@@ -126,8 +172,10 @@ export default function App() {
 
       <section>
         <h2>History</h2>
-        <JobGallery jobs={jobs} selectedId={selectedId} onSelect={setSelectedId} />
+        <JobGallery jobs={videoJobs} selectedId={selectedId} onSelect={setSelectedId} />
       </section>
+      </>
+      )}
     </main>
   );
 }

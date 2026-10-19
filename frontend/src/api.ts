@@ -14,8 +14,41 @@ export interface JobResult {
   seed?: number;
 }
 
+export interface Track {
+  mp3: string;
+  flac: string;
+  duration: number;
+  seed: number;
+  peaks: number[];
+}
+
+export interface MusicResult {
+  tracks: Track[];
+  seed: number;
+}
+
+export interface MusicSettings {
+  title: string;
+  tags: string;
+  lyrics: string;
+  instrumental: boolean;
+  duration: number;
+  bpm: number;
+  keyscale: string;
+  timesignature: string;
+  language: string;
+  variations: number;
+}
+
+export interface MusicOptions {
+  keys: string[];
+  timesignatures: string[];
+  languages: string[];
+}
+
 export interface Job {
   id: string;
+  kind: "video" | "music";
   prompt: string;
   settings: Partial<JobSettings> & Record<string, unknown>;
   state: JobState;
@@ -32,6 +65,7 @@ export interface Health {
   comfyui: "ok" | "down";
   devices?: string[];
   error?: string;
+  music?: "ok" | "down";
   ollama?: "ok" | "down" | "model missing";
   llm_model?: string;
 }
@@ -82,6 +116,8 @@ const post = (url: string, body?: unknown) =>
 
 export const getHealth = () => fetch("/api/health").then((r) => json<Health>(r));
 export const listVoices = () => fetch("/api/voices").then((r) => json<Voice[]>(r));
+export const getMusicOptions = () => fetch("/api/music/options").then((r) => json<MusicOptions>(r));
+export const createMusic = (settings: MusicSettings) => post("/api/music", settings).then((r) => json<Job>(r));
 export const listJobs = () => fetch("/api/jobs").then((r) => json<Job[]>(r));
 export const createJob = (prompt: string, settings: JobSettings) =>
   post("/api/jobs", { prompt, ...settings }).then((r) => json<Job>(r));

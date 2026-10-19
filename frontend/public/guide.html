@@ -74,13 +74,14 @@
       <li><a href="#jobs">Working with results</a></li>
       <li><a href="#tips">Tips for better videos</a></li>
       <li><a href="#speed">How long things take</a></li>
+      <li><a href="#music">Music Studio</a></li>
       <li><a href="#trouble">Troubleshooting</a></li>
       <li><a href="#files">Where files are</a></li>
     </ol>
   </nav>
 
   <h2 id="start">1. Starting and stopping</h2>
-  <p>Happica runs three local services: <strong>ComfyUI</strong> (the image and video models), the <strong>backend</strong> (the job queue), and this <strong>web app</strong>. One script starts all three:</p>
+  <p>Happica runs four local services: two copies of <strong>ComfyUI</strong> (one for images and video, one for music), the <strong>backend</strong> (the job queue), and this <strong>web app</strong>. One script starts them all:</p>
   <pre><code>cd ~/Project/happica
 scripts/start.sh</code></pre>
   <p>Then open <a href="http://127.0.0.1:5173">http://127.0.0.1:5173</a>. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in that terminal to stop everything.</p>
@@ -185,7 +186,33 @@ scripts/start.sh</code></pre>
   </div>
   <p class="note">AI motion uses most of your Mac's memory. Close other heavy apps while it runs, and expect the fans to spin up.</p>
 
-  <h2 id="trouble">9. Troubleshooting</h2>
+  <h2 id="music">9. Music Studio</h2>
+  <p>Open the <strong>Music</strong> tab at the top to make songs — with sung lyrics or instrumental — using ACE-Step 1.5, a local music model. Every song is made in <strong>two takes</strong> so you can pick the better one.</p>
+  <ol class="steps">
+    <li><strong>Style:</strong> describe the genre, mood, instruments and voice — e.g. <em>synthwave, energetic, warm synth pads, female vocals</em>. Click the <strong>+ chips</strong> to add common tags.</li>
+    <li><strong>Lyrics:</strong> write them in sections. Click <strong>[verse]</strong>, <strong>[chorus]</strong>, <strong>[bridge]</strong>… to insert a section tag where your cursor is. Or switch on <strong>Instrumental</strong> to skip lyrics.</li>
+    <li>Pick the <strong>length</strong> (30 s – 4 min), <strong>BPM</strong>, <strong>key</strong> and <strong>time signature</strong>. For vocals, set the <strong>lyrics language</strong> (51 languages).</li>
+    <li>Click <strong>Create song</strong>. The library card shows progress: <em>writing the song</em> (the model plans melody and structure), then <em>rendering audio</em>.</li>
+    <li>Play each take with ▶, or click anywhere on the waveform to jump there. <strong>MP3</strong> downloads the take.</li>
+  </ol>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Song length</th><th>Time for 2 takes (M2, 16 GB)</th></tr></thead>
+      <tbody>
+        <tr><td>30 s</td><td>~2 min</td></tr>
+        <tr><td>1 min</td><td>~3 min</td></tr>
+        <tr><td>2 min</td><td>~5–6 min</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul>
+    <li><strong>Lyrics tips:</strong> short lines sing better than long ones. Repeat the chorus — songs need a hook. A 30-second song fits about one verse and one chorus.</li>
+    <li>Songs are mastered to streaming loudness (−14 LUFS), trimmed of trailing silence and faded out at the end.</li>
+    <li><strong>Re-run</strong> makes two new takes with the same settings; <strong>Edit &amp; re-run</strong> loads them into the form.</li>
+  </ul>
+  <p class="note">Coming next: describe a song in plain words and let the AI write the lyrics, and background music for your videos.</p>
+
+  <h2 id="trouble">10. Troubleshooting</h2>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Problem</th><th>What to do</th></tr></thead>
@@ -195,12 +222,13 @@ scripts/start.sh</code></pre>
         <tr><td>“ComfyUI offline” stays on</td><td>Restart with <kbd>Ctrl</kbd>+<kbd>C</kbd> and <code>scripts/start.sh</code>. Look at the end of <code>outputs/logs/comfyui.log</code> for the reason.</td></tr>
         <tr><td>AI motion is much slower than ~7 min a scene</td><td>The Mac is short on memory and swapping. Close other apps (browsers with many tabs, other AI tools) and try again.</td></tr>
         <tr><td>Narration sounds wrong or garbled</td><td>The voice and the text are in different languages. Pick a voice that matches the story's language.</td></tr>
+        <tr><td>“The music engine isn't running”</td><td>The music copy of ComfyUI (port 8189) is down. Restart with <code>scripts/start.sh</code>; its log is <code>outputs/logs/comfyui-music.log</code>.</td></tr>
         <tr><td>A character changes between scenes</td><td>See “Keep characters consistent” above — Regenerate the odd scene with a precise description.</td></tr>
       </tbody>
     </table>
   </div>
 
-  <h2 id="files">10. Where files are</h2>
+  <h2 id="files">11. Where files are</h2>
   <p>Everything is stored locally inside the project folder:</p>
   <div class="table-wrap">
     <table>
@@ -210,8 +238,9 @@ scripts/start.sh</code></pre>
         <tr><td><code>outputs/&lt;job&gt;/images/</code></td><td>Each scene's still image (PNG)</td></tr>
         <tr><td><code>outputs/&lt;job&gt;/clips/</code></td><td>Each scene's video clip</td></tr>
         <tr><td><code>outputs/&lt;job&gt;/audio/</code></td><td>Each scene's narration (WAV)</td></tr>
+        <tr><td><code>outputs/&lt;song&gt;/v1.mp3</code>, <code>v2.mp3</code></td><td>A song's two takes (also as lossless <code>.flac</code>)</td></tr>
         <tr><td><code>outputs/logs/</code></td><td>Logs for troubleshooting</td></tr>
-        <tr><td><code>models/</code></td><td>The AI models (~18 GB)</td></tr>
+        <tr><td><code>models/</code></td><td>The AI models (~28 GB)</td></tr>
       </tbody>
     </table>
   </div>

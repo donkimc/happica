@@ -11,13 +11,17 @@ import httpx
 
 import pipeline
 from comfy_client import ComfyClient
-from config import FRONTEND_ORIGIN, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR
-from pipeline import tts
+from config import FRONTEND_ORIGIN, MUSIC_COMFY_URL, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR
+from pipeline import music, tts
 from jobs import JobRunner, JobStore
 
 comfy = ComfyClient()
+music_comfy = ComfyClient(MUSIC_COMFY_URL)
 store = JobStore()
-runner = JobRunner(store, lambda job, job_dir, report: pipeline.run(job, job_dir, report, comfy))
+runner = JobRunner(store, {
+    "video": lambda job, job_dir, report: pipeline.run(job, job_dir, report, comfy),
+    "music": lambda job, job_dir, report: music.run(job, job_dir, report, music_comfy),
+})
 
 
 @asynccontextmanager
@@ -26,6 +30,7 @@ async def lifespan(_: FastAPI):
     yield
     worker.cancel()
     await comfy.aclose()
+    await music_comfy.aclose()
 
 
 app = FastAPI(title="Happica", lifespan=lifespan)
@@ -60,6 +65,11 @@ async def health():
     except Exception as e:
         out.update(comfyui="down", error=str(e))
     try:
+        await music_comfy.system_stats()
+        out["music"] = "ok"
+    except Exception:
+        out["music"] = "down"
+    try:
         async with httpx.AsyncClient(timeout=2) as client:
             tags = (await client.get(f"{OLLAMA_URL}/api/tags")).json()
         out["ollama"] = "ok" if any(m["name"] == OLLAMA_MODEL for m in tags.get("models", [])) else "model missing"
@@ -80,8 +90,49 @@ async def create_job(req: JobRequest):
 
 
 @app.get("/api/jobs")
-async def list_jobs():
-    return store.list()
+async def list_jobs(kind: str | None = None):
+    return store.list(kind)
+
+
+class MusicRequest(BaseModel):
+    title: str = ""
+    tags: str = Field(min_length=1, max_length=500)
+    lyrics: str = Field(default="", max_length=5000)
+    instrumental: bool = False
+    duration: float = Field(default=60, ge=10, le=240)
+    bpm: int = Field(default=110, ge=30, le=300)
+    keyscale: str = "C major"
+    timesignature: str = Field(default="4", pattern="^[2346]$")
+    language: str = Field(default="en", pattern="^[a-z]{2,3}$")
+    variations: int = Field(default=2, ge=1, le=2)
+    seed: int | None = None
+
+
+@app.post("/api/music")
+async def create_music(req: MusicRequest):
+    if not req.instrumental and not req.lyrics.strip():
+        raise HTTPException(400, "Add lyrics, or switch on Instrumental")
+    settings = req.model_dump()
+    return runner.submit(req.title.strip() or req.tags.strip()[:60], settings, "music")
+
+
+_music_options: dict | None = None
+
+
+@app.get("/api/music/options")
+async def music_options():
+    """Keys, time signatures and lyric languages ACE-Step accepts, read from the music instance."""
+    global _music_options
+    if _music_options is None:
+        try:
+            r = await music_comfy.http.get("/object_info/TextEncodeAceStepAudio1.5")
+            spec = r.json()["TextEncodeAceStepAudio1.5"]["input"]["required"]
+        except Exception:
+            raise HTTPException(503, "The music engine isn't running")
+        combo = lambda s: s[1]["options"] if s[0] == "COMBO" else s[0]
+        _music_options = {"keys": combo(spec["keyscale"]), "timesignatures": combo(spec["timesignature"]),
+                          "languages": combo(spec["language"])}
+    return _music_options
 
 
 @app.get("/api/jobs/{job_id}")
@@ -111,7 +162,7 @@ async def rerun_job(job_id: str, req: RerunRequest = RerunRequest()):
     job = _get_or_404(job_id)
     settings = dict(job["settings"])
     settings["seed"] = (job["result"] or {}).get("seed", settings.get("seed")) if req.keep_seed else None
-    return runner.submit(job["prompt"], settings)
+    return runner.submit(job["prompt"], settings, job["kind"])
 
 
 class RegenerateRequest(BaseModel):
@@ -139,7 +190,7 @@ async def delete_job(job_id: str):
 async def cancel_job(job_id: str):
     job = _get_or_404(job_id)
     if job["state"] == "running":
-        await comfy.interrupt()
+        await (music_comfy if job["kind"] == "music" else comfy).interrupt()
     if job["state"] in ("queued", "running"):
         job = store.update(job_id, state="cancelled")
     return job

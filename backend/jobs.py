@@ -10,6 +10,7 @@ from typing import Callable
 from config import DB_PATH, OUTPUTS_DIR
 
 STATES = ("queued", "running", "done", "failed", "cancelled")
+KINDS = ("video", "music")
 
 
 class JobStore:
@@ -20,16 +21,20 @@ class JobStore:
             """CREATE TABLE IF NOT EXISTS jobs (
                 id TEXT PRIMARY KEY, prompt TEXT, settings TEXT, state TEXT,
                 stage TEXT, progress REAL, error TEXT, result TEXT,
-                created REAL, updated REAL)"""
+                created REAL, updated REAL, kind TEXT NOT NULL DEFAULT 'video')"""
         )
+        # Databases from before music existed: every job in them is a video job
+        columns = {row["name"] for row in self.db.execute("PRAGMA table_info(jobs)")}
+        if "kind" not in columns:
+            self.db.execute("ALTER TABLE jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'video'")
         self.db.commit()
 
-    def create(self, prompt: str, settings: dict) -> dict:
+    def create(self, prompt: str, settings: dict, kind: str = "video") -> dict:
         now = time.time()
         job = dict(id=uuid.uuid4().hex[:12], prompt=prompt, settings=json.dumps(settings),
                    state="queued", stage="", progress=0.0, error=None, result=None,
-                   created=now, updated=now)
-        self.db.execute(f"INSERT INTO jobs VALUES ({','.join('?' * len(job))})", tuple(job.values()))
+                   created=now, updated=now, kind=kind)
+        self.db.execute(f"INSERT INTO jobs ({','.join(job)}) VALUES ({','.join('?' * len(job))})", tuple(job.values()))
         self.db.commit()
         return self.get(job["id"])
 
@@ -50,8 +55,11 @@ class JobStore:
         self.db.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
         self.db.commit()
 
-    def list(self, limit: int = 50) -> list[dict]:
-        rows = self.db.execute("SELECT * FROM jobs ORDER BY created DESC LIMIT ?", (limit,)).fetchall()
+    def list(self, kind: str | None = None, limit: int = 50) -> list[dict]:
+        if kind:
+            rows = self.db.execute("SELECT * FROM jobs WHERE kind = ? ORDER BY created DESC LIMIT ?", (kind, limit)).fetchall()
+        else:
+            rows = self.db.execute("SELECT * FROM jobs ORDER BY created DESC LIMIT ?", (limit,)).fetchall()
         return [self._to_dict(r) for r in rows]
 
     @staticmethod
@@ -68,19 +76,19 @@ Task = Callable  # async fn(job, job_dir, report) -> result dict
 class JobRunner:
     """Runs queued tasks one at a time (the GPU only fits one); publishes every state change to subscribers.
 
-    A task is either a full generation (`submit`) or follow-up work on an existing job (`enqueue`),
-    such as regenerating one scene.
+    A task is either a full generation (`submit`, using the pipeline for the job's kind) or follow-up
+    work on an existing job (`enqueue`), such as regenerating one scene.
     """
 
-    def __init__(self, store: JobStore, pipeline: Task):
+    def __init__(self, store: JobStore, pipelines: dict[str, Task]):
         self.store = store
-        self.pipeline = pipeline
+        self.pipelines = pipelines
         self.queue: asyncio.Queue[tuple[str, Task]] = asyncio.Queue()
         self.subscribers: dict[str, set[asyncio.Queue]] = {}
 
-    def submit(self, prompt: str, settings: dict) -> dict:
-        job = self.store.create(prompt, settings)
-        self.queue.put_nowait((job["id"], self.pipeline))
+    def submit(self, prompt: str, settings: dict, kind: str = "video") -> dict:
+        job = self.store.create(prompt, settings, kind)
+        self.queue.put_nowait((job["id"], self.pipelines[kind]))
         return job
 
     def enqueue(self, job_id: str, task: Task, stage: str = "") -> dict:
