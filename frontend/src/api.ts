@@ -103,7 +103,8 @@ export interface JobSettings {
   motion: "none" | "kenburns" | "ltx";
   style: string;
   clip_seconds: number;
-  scene_mode: "lines" | "llm";
+  scene_mode: "lines" | "llm" | "slides";
+  slides?: { image: string; text: string }[];
   narrate: boolean;
   voice: string;
   subtitles: "off" | "soft" | "burn";
@@ -146,6 +147,11 @@ export const listVoices = () => fetch("/api/voices").then((r) => json<Voice[]>(r
 export const getMusicOptions = () => fetch("/api/music/options").then((r) => json<MusicOptions>(r));
 export const draftSong = (description: string, instrumental: boolean, duration: number) =>
   post("/api/music/draft", { description, instrumental, duration }).then((r) => json<Partial<MusicSettings>>(r));
+export async function uploadImage(file: File): Promise<{ path: string; width: number; height: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  return fetch("/api/uploads", { method: "POST", body: form }).then((r) => json(r));
+}
 export const createImages = (settings: ImageSettings) => post("/api/images", settings).then((r) => json<Job>(r));
 export const createSfx = (settings: SfxSettings) => post("/api/sfx", settings).then((r) => json<Job>(r));
 export const createMusic = (settings: MusicSettings) => post("/api/music", settings).then((r) => json<Job>(r));

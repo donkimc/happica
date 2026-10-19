@@ -5,6 +5,7 @@ fails late still shows what it made. With narration on, each scene lasts at leas
 its voiceover, and subtitles are timed to the speech. Background music is either scored for the
 story (auto) or taken from the Music Studio library, and ducked under the narration.
 """
+import asyncio
 import math
 import random
 from pathlib import Path
@@ -28,6 +29,15 @@ def _rel(job_dir: Path, p: Path) -> str:
     return str(p.relative_to(job_dir.parent))
 
 
+def _fit_image(src: Path, out: Path, width: int, height: int) -> None:
+    """Scale and centre-crop a photo to fill the video frame (no letterboxing)."""
+    from PIL import Image, ImageOps
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with Image.open(src) as img:
+        ImageOps.fit(img.convert("RGB"), (width, height), Image.Resampling.LANCZOS).save(out)
+
+
 def _video_prompt(shot: dict) -> str:
     return f"{shot['prompt']}. {shot['motion']}" if shot.get("motion") else shot["prompt"]
 
@@ -39,7 +49,11 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
                     "images": [], "clips": [], "audio": [], "video": None, "subtitles": None}
 
     report("scenes", 0.0)
-    shots = await scenes.split(job["prompt"], settings)
+    slides = settings.get("scene_mode") == "slides"
+    if slides:  # the user's own images, each with optional narration
+        shots = [{"prompt": sl["text"] or "a photograph", "narration": sl["text"], "motion": ""} for sl in settings["slides"]]
+    else:
+        shots = await scenes.split(job["prompt"], settings)
     result.update(scenes=[s["prompt"] for s in shots], narration=[s["narration"] for s in shots],
                   motion=[s["motion"] for s in shots])
     report("scenes", 1.0, result=result)
@@ -48,6 +62,8 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
     speech = [0.0] * len(shots)
     if settings.get("narrate"):
         for i, shot in enumerate(shots):
+            if not shot["narration"].strip():  # a slide without text stays silent
+                continue
             report("narration", i / len(shots))
             speech[i] = await tts.speak(shot["narration"], settings.get("voice", "af_heart"), _paths(job_dir, i)["audio"])
             result["audio"].append(_rel(job_dir, _paths(job_dir, i)["audio"]))
@@ -62,8 +78,13 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
 
     image_paths = [_paths(job_dir, i)["image"] for i in range(len(shots))]
     seeds = [seed + i for i in range(len(shots))]
-    await image.generate_batch(comfy, [s["prompt"] for s in shots], settings, image_paths, seeds,
-                               on_progress=lambda p: report("image", p))
+    if slides:
+        report("image", 0.0)
+        for sl, out in zip(settings["slides"], image_paths):
+            await asyncio.to_thread(_fit_image, OUTPUTS_DIR / sl["image"], out, settings["width"], settings["height"])
+    else:
+        await image.generate_batch(comfy, [s["prompt"] for s in shots], settings, image_paths, seeds,
+                                   on_progress=lambda p: report("image", p))
     result.update(images=[_rel(job_dir, p) for p in image_paths], seeds=seeds)
     report("image", 1.0, result=result)
 
@@ -211,7 +232,7 @@ async def _assemble(job_dir: Path, settings: dict, result: dict) -> dict:
     narration_track, cues = None, []
     if result.get("audio"):
         starts = assemble.scene_starts(durations, fade)
-        audio = [_paths(job_dir, i)["audio"] for i in range(n)]
+        audio = [p if (p := _paths(job_dir, i)["audio"]).is_file() else None for i in range(n)]
         narration_track = assemble.mix_narration(audio, starts, LEAD, total, job_dir / "narration.wav")
         if settings.get("subtitles", "off") != "off":
             for i, line in enumerate(result["narration"]):

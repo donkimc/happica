@@ -1,8 +1,10 @@
 """Happica backend: REST + WebSocket API in front of ComfyUI."""
 import asyncio
+import io
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -40,6 +42,11 @@ app.add_middleware(CORSMiddleware, allow_origins=[FRONTEND_ORIGIN], allow_method
 app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
 
 
+class Slide(BaseModel):
+    image: str  # a path under outputs/: an upload, or an image from the Image library or a video
+    text: str = Field(default="", max_length=400)  # narration / caption for this slide
+
+
 class JobRequest(BaseModel):
     prompt: str = Field(min_length=1)
     width: int = 768
@@ -49,7 +56,8 @@ class JobRequest(BaseModel):
     clip_seconds: float = Field(default=3, ge=1, le=10)
     fade: float = Field(default=0.5, ge=0, le=2)
     style: str = ""
-    scene_mode: str = Field(default="lines", pattern="^(lines|llm)$")
+    scene_mode: str = Field(default="lines", pattern="^(lines|llm|slides)$")
+    slides: list[Slide] = Field(default_factory=list, max_length=30)
     narrate: bool = False
     voice: str = Field(default="af_heart", pattern="^[a-z]{2}_[a-z]+$")
     subtitles: str = Field(default="burn", pattern="^(off|soft|burn)$")
@@ -107,6 +115,13 @@ async def list_voices():
 async def create_job(req: JobRequest):
     _check_library_track(req.music, req.music_track)
     _check_library_track(req.ambience, req.ambience_track, "sound from the Sound library")
+    if req.scene_mode == "slides":
+        if not req.slides:
+            raise HTTPException(400, "Add at least one image")
+        for slide in req.slides:
+            path = (OUTPUTS_DIR / slide.image).resolve()
+            if not path.is_relative_to(OUTPUTS_DIR.resolve()) or path.suffix != ".png" or not path.is_file():
+                raise HTTPException(400, f"Image not found: {slide.image}")
     return runner.submit(req.prompt, req.model_dump(exclude={"prompt"}))
 
 
@@ -201,6 +216,38 @@ async def draft_song(req: DraftRequest):
         raise HTTPException(503, str(e))
 
 
+UPLOADS = OUTPUTS_DIR / "uploads"
+MAX_UPLOAD = 20 * 1024 * 1024
+
+
+@app.post("/api/uploads")
+async def upload_image(file: UploadFile = File(...)):
+    """Accept a photo for slideshows (and later characters). It is decoded and re-saved as PNG, so only real
+    images get stored, with a random name inside outputs/uploads/."""
+    data = await file.read(MAX_UPLOAD + 1)
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(413, "Images must be under 20 MB")
+    try:
+        img = await asyncio.to_thread(_decode_image, data)
+    except Exception:
+        raise HTTPException(400, "That file isn't an image this app can read (JPEG, PNG, WebP, HEIC…)")
+    UPLOADS.mkdir(parents=True, exist_ok=True)
+    out = UPLOADS / f"{uuid.uuid4().hex[:16]}.png"
+    await asyncio.to_thread(img.save, out)
+    return {"path": str(out.relative_to(OUTPUTS_DIR)), "width": img.width, "height": img.height}
+
+
+def _decode_image(data: bytes):
+    from PIL import Image, ImageOps
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()  # iPhone photos are HEIC by default
+    img = Image.open(io.BytesIO(data))
+    img = ImageOps.exif_transpose(img).convert("RGB")  # phone photos carry their rotation in EXIF
+    img.thumbnail((2048, 2048))  # plenty for 768-1024 px video, keeps storage small
+    return img
+
+
 class ImageRequest(BaseModel):
     prompt: str = Field(min_length=2, max_length=1000)
     style: str = ""
@@ -277,6 +324,8 @@ class RegenerateRequest(BaseModel):
 async def regenerate_scene(job_id: str, index: int, req: RegenerateRequest = RegenerateRequest()):
     job = _get_or_404(job_id)
     _require_idle(job)
+    if job["settings"].get("scene_mode") == "slides":
+        raise HTTPException(400, "Slideshow images are your own — replace them with Edit & re-run")
     if not job["result"] or not 0 <= index < len(job["result"].get("images", [])):
         raise HTTPException(400, "scene has no image to regenerate")
     task = lambda j, job_dir, report: pipeline.regenerate_scene(j, job_dir, report, comfy, index, req.prompt)

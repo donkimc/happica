@@ -21,11 +21,13 @@ import JobGallery from "./JobGallery";
 import MusicStudio from "./MusicStudio";
 import ImageStudio from "./ImageStudio";
 import SfxStudio from "./SfxStudio";
+import { SlideItem } from "./SlidesEditor";
 
-type Tab = "video" | "image" | "music" | "sfx";
+type Tab = "video" | "slides" | "image" | "music" | "sfx";
 const TABS: { id: Tab; label: string }[] = [
   { id: "image", label: "Images" },
-  { id: "video", label: "Video" },
+  { id: "video", label: "Story Video" },
+  { id: "slides", label: "Slideshow" },
   { id: "music", label: "Music" },
   { id: "sfx", label: "Sound FX" },
 ];
@@ -39,6 +41,18 @@ export default function App() {
   const [settings, setSettings] = useState<JobSettings>(loadSettings);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>(tabFromHash);
+  const [slides, setSlides] = useState<SlideItem[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(SLIDES_KEY) ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(SLIDES_KEY, JSON.stringify(slides));
+    } catch {} // storage blocked: the slide list just won't survive a reload
+  }, [slides]);
   const watching = useRef(new Map<string, () => void>());
 
   useEffect(() => {
@@ -102,7 +116,9 @@ export default function App() {
     setSelectedId(job.id);
   };
 
-  const videoJobs = jobs.filter((j) => j.kind === "video");
+  // Story Video and Slideshow share the video pipeline; each tab shows its own history
+  const slidesTab = tab === "slides";
+  const videoJobs = jobs.filter((j) => j.kind === "video" && (j.settings.scene_mode === "slides") === slidesTab);
   const musicJobs = jobs.filter((j) => j.kind === "music");
   const sfxJobs = jobs.filter((j) => j.kind === "sfx");
   const imageJobs = jobs.filter((j) => j.kind === "image");
@@ -171,7 +187,23 @@ export default function App() {
         sfxLibrary={sfxJobs}
         onPrompt={setPrompt}
         onSettings={setSettings}
-        onSubmit={() => act(async () => select(await createJob(prompt, settings)))}
+        slidesMode={slidesTab}
+        slides={slides}
+        onSlides={setSlides}
+        imageLibrary={imageJobs}
+        onSubmit={() =>
+          act(async () =>
+            select(
+              slidesTab
+                ? await createJob(slides.find((sl) => sl.text.trim())?.text.slice(0, 80) || `Slideshow (${slides.length} images)`, {
+                    ...settings,
+                    scene_mode: "slides",
+                    slides,
+                  })
+                : await createJob(prompt, { ...settings, scene_mode: settings.scene_mode === "slides" ? "lines" : settings.scene_mode }),
+            ),
+          )
+        }
         error={error}
       />
 
@@ -185,7 +217,8 @@ export default function App() {
             // Story mode: the original story. Line mode: the current scene prompts, so edits made
             // while regenerating single scenes carry over.
             const story = selected.settings.scene_mode === "llm";
-            setPrompt((!story && selected.result?.scenes.join("\n")) || selected.prompt);
+            if (selected.settings.scene_mode === "slides") setSlides(selected.settings.slides ?? []);
+            else setPrompt((!story && selected.result?.scenes.join("\n")) || selected.prompt);
             const { seed: _seed, ...rest } = selected.settings; // edited re-runs get a fresh seed
             setSettings({ ...DEFAULTS, ...rest });
             document.getElementById("generate")?.scrollIntoView({ behavior: "smooth" });
@@ -217,6 +250,7 @@ export default function App() {
 }
 
 const SETTINGS_KEY = "happica.settings";
+const SLIDES_KEY = "happica.slides";
 
 /** Last-used settings, so a reload doesn't reset the form. */
 function loadSettings(): JobSettings {

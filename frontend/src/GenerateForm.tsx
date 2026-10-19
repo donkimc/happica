@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { Health, Job, JobSettings, listVoices, Voice } from "./api";
 import SoundPicker from "./MusicPicker";
+import SlidesEditor, { SlideItem } from "./SlidesEditor";
 import { estimateSeconds, formatDuration, matches, PRESETS } from "./presets";
 
 export const DEFAULTS: JobSettings = {
@@ -35,32 +36,40 @@ interface Props {
   health: Health | null;
   library: Job[];
   sfxLibrary: Job[];
+  slidesMode?: boolean;
+  slides?: SlideItem[];
+  onSlides?: Dispatch<SetStateAction<SlideItem[]>>;
+  imageLibrary?: Job[];
   onPrompt: (p: string) => void;
   onSettings: (s: JobSettings) => void;
   onSubmit: () => void;
   error: string | null;
 }
 
-export default function GenerateForm({ prompt, settings, health, library, sfxLibrary, onPrompt, onSettings, onSubmit, error }: Props) {
+export default function GenerateForm({ prompt, settings, health, library, sfxLibrary, slidesMode = false, slides = [], onSlides, imageLibrary = [], onPrompt, onSettings, onSubmit, error }: Props) {
   const [voices, setVoices] = useState<Voice[]>([]);
   useEffect(() => {
     listVoices().then(setVoices).catch(() => {});
   }, []);
 
   const set = (patch: Partial<JobSettings>) => onSettings({ ...settings, ...patch });
-  const llm = settings.scene_mode === "llm";
+  const llm = !slidesMode && settings.scene_mode === "llm";
   const llmUnavailable = llm && health?.ollama !== undefined && health.ollama !== "ok";
   const byLanguage = voices.reduce<Record<string, Voice[]>>((acc, v) => {
     (acc[v.language] ??= []).push(v);
     return acc;
   }, {});
 
-  const sceneCount = llm
-    ? settings.max_scenes
-    : Math.min(settings.max_scenes, prompt.split("\n").filter((l) => l.trim()).length);
+  const sceneCount = slidesMode
+    ? slides.length
+    : llm
+      ? settings.max_scenes
+      : Math.min(settings.max_scenes, prompt.split("\n").filter((l) => l.trim()).length);
+  const ready = slidesMode ? slides.length > 0 : prompt.trim().length > 0;
 
   return (
     <section className="card" id="generate">
+      {!slidesMode && (
       <div className="presets" aria-label="Presets">
         {PRESETS.map((p) => (
           <button
@@ -73,7 +82,12 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
           </button>
         ))}
       </div>
+      )}
 
+      {slidesMode && onSlides && <SlidesEditor slides={slides} onChange={onSlides} imageLibrary={imageLibrary} />}
+
+      {!slidesMode && (
+      <>
       <div className="segmented" role="radiogroup" aria-label="How to split into scenes">
         <button
           role="radio"
@@ -96,7 +110,7 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
       <label htmlFor="prompt">
         {llm ? "Tell a story — the AI splits it into scenes and writes the narration" : "Describe your video — one line per scene"}
       </label>
-      <textarea id="prompt" rows={5} value={prompt} onChange={(e) => onPrompt(e.target.value)} placeholder={PLACEHOLDERS[settings.scene_mode]} />
+      <textarea id="prompt" rows={5} value={prompt} onChange={(e) => onPrompt(e.target.value)} placeholder={PLACEHOLDERS[llm ? "llm" : "lines"]} />
       {llmUnavailable && (
         <p className="error">
           {health?.ollama === "down"
@@ -105,10 +119,15 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
         </p>
       )}
 
+      </>
+      )}
+
+      {!slidesMode && (
       <label className="style">
         Style (added to every scene)
         <input value={settings.style} onChange={(e) => set({ style: e.target.value })} />
       </label>
+      )}
 
       <div className="row">
         <label>
@@ -125,6 +144,7 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
             <option value="512x512">512×512 (square)</option>
           </select>
         </label>
+        {!slidesMode && (
         <label>
           {llm ? "Max scenes" : "Scenes"}
           <input
@@ -135,6 +155,7 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
             onChange={(e) => set({ max_scenes: Number(e.target.value) })}
           />
         </label>
+        )}
         <label>
           Motion
           <select value={settings.motion} onChange={(e) => set({ motion: e.target.value as JobSettings["motion"] })}>
@@ -193,10 +214,10 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
 
       <div className="row">
         <div className="generate">
-          <button disabled={!prompt.trim() || llmUnavailable} onClick={onSubmit}>
+          <button disabled={!ready || llmUnavailable} onClick={onSubmit}>
             Generate
           </button>
-          {prompt.trim() && <span className="muted">{formatDuration(estimateSeconds(settings, sceneCount))}</span>}
+          {ready && <span className="muted">{formatDuration(estimateSeconds(settings, sceneCount) - (slidesMode ? 25 + 5 * sceneCount : 0))}</span>}
         </div>
       </div>
 

@@ -133,7 +133,7 @@ export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, on
               src={src}
               prompt={result.scenes[i]}
               narration={result.narration?.[i]}
-              disabled={active}
+              disabled={active || job.settings.scene_mode === "slides"}
               onRegenerate={(p) => onRegenerate(i, p)}
             />
           ))}

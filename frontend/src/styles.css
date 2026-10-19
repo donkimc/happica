@@ -156,3 +156,18 @@ label.volume input { width: 100%; padding: 0; }
 .chip.small.on { border-color: var(--accent); color: var(--accent); }
 .link-small { font-size: 12px; color: var(--accent); text-decoration: none; }
 .tabs { flex-wrap: wrap; }
+
+/* Slideshow */
+.upload-button { position: relative; overflow: hidden; display: inline-flex; align-items: center; background: var(--accent); color: white; font-weight: 600; font-size: 14px; border-radius: 8px; padding: 9px 16px; cursor: pointer; }
+.upload-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; margin: 10px 0; max-height: 260px; overflow-y: auto; }
+.pick { padding: 0; background: none; border: 2px solid transparent; border-radius: 6px; overflow: hidden; }
+.pick:hover { border-color: var(--accent); }
+.pick img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.slide-list { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.slide { display: flex; gap: 10px; align-items: stretch; }
+.slide > img { width: 110px; height: 74px; object-fit: cover; border-radius: 6px; flex: none; }
+.slide-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.slide-body textarea { margin-top: 0; font-size: 13px; }
+.slide-actions { display: flex; gap: 12px; align-items: center; font-size: 13px; }
+.danger-link { color: var(--bad) !important; }
