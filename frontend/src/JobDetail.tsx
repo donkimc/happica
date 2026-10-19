@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { isActive, Job, JobSettings, outputUrl } from "./api";
+import { isActive, Job, JobSettings, outputUrl, SoundFields } from "./api";
 import { DEFAULTS } from "./GenerateForm";
-import MusicPicker, { MusicChoice } from "./MusicPicker";
+import SoundPicker from "./MusicPicker";
 
 interface Props {
   job: Job;
@@ -11,15 +11,19 @@ interface Props {
   onDelete: () => void;
   onRegenerate: (index: number, prompt: string) => void;
   library: Job[];
-  onChangeMusic: (choice: MusicChoice) => void;
+  sfxLibrary: Job[];
+  onChangeSound: (choice: SoundFields) => void;
+  onNewAuto: (layer: "music" | "ambience") => void;
 }
 
-export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, onRegenerate, library, onChangeMusic }: Props) {
+export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, onRegenerate, library, sfxLibrary, onChangeSound, onNewAuto }: Props) {
   const active = isActive(job);
   const result = job.result;
   const settings = { ...DEFAULTS, ...job.settings } as JobSettings;
   const [musicOpen, setMusicOpen] = useState(false);
-  const [choice, setChoice] = useState<MusicChoice>(settings);
+  const [choice, setChoice] = useState<SoundFields>(settings);
+  const needsAuto = (layer: "music" | "ambience") =>
+    choice[layer] === "auto" && (settings[layer] !== "auto" || !result?.[layer]);
 
   return (
     <article className="card detail">
@@ -68,7 +72,7 @@ export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, on
                   setMusicOpen((o) => !o);
                 }}
               >
-                Change music
+                Change sound
               </button>
             )}
             <button className="secondary danger" onClick={onDelete}>Delete</button>
@@ -80,20 +84,38 @@ export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, on
         <p className="muted music-line">
           ♪ {result.music.title || "Untitled"} — {result.music.source === "auto" ? `scored for this video (${result.music.tags})` : "from your Music library"}
           {" · "}level {Math.round(settings.music_volume * 100)}%
+          {settings.music === "auto" && !active && (
+            <button className="link" onClick={() => onNewAuto("music")}>New score</button>
+          )}
+        </p>
+      )}
+      {result?.ambience && settings.ambience !== "off" && (
+        <p className="muted music-line">
+          ≋ Ambience: {result.ambience.title} {result.ambience.source === "library" ? "(Sound library)" : "(made for this video)"}
+          {" · "}level {Math.round(settings.ambience_volume * 100)}%
+          {settings.ambience === "auto" && !active && (
+            <button className="link" onClick={() => onNewAuto("ambience")}>New ambience</button>
+          )}
         </p>
       )}
 
       {musicOpen && !active && (
         <div className="music-panel">
-          <MusicPicker value={choice} library={library} narrated={!!result?.audio?.length} onChange={(patch) => setChoice((c) => ({ ...c, ...patch }))} />
+          <SoundPicker
+            value={choice}
+            musicLibrary={library}
+            sfxLibrary={sfxLibrary}
+            narrated={!!result?.audio?.length}
+            onChange={(patch) => setChoice((c) => ({ ...c, ...patch }))}
+          />
           <div className="row tight">
             <button
               onClick={() => {
-                onChangeMusic(choice);
+                onChangeSound(choice);
                 setMusicOpen(false);
               }}
             >
-              {choice.music === "auto" ? "Score & re-mix (~1–2 min)" : "Re-mix (a few seconds)"}
+              {needsAuto("music") ? "Score & re-mix (~1–2 min)" : needsAuto("ambience") ? "Make ambience & re-mix (~30 s)" : "Re-mix (a few seconds)"}
             </button>
             <button className="secondary" onClick={() => setMusicOpen(false)}>Cancel</button>
           </div>

@@ -8,6 +8,7 @@ export interface JobResult {
   subtitles?: string | null;
   subtitles_vtt?: string | null;
   music?: { source: "auto" | "library"; track: string; mp3?: string; title: string; tags?: string } | null;
+  ambience?: { source: "auto" | "library"; track: string; mp3?: string; title: string } | null;
   seeds?: (number | null)[];
   images: string[];
   clips: string[];
@@ -42,6 +43,14 @@ export interface MusicSettings {
   variations: number;
 }
 
+export interface SfxSettings {
+  prompt: string;
+  duration: number;
+  loop: boolean;
+  enhance: boolean;
+  variations: number;
+}
+
 export interface MusicOptions {
   keys: string[];
   timesignatures: string[];
@@ -50,7 +59,7 @@ export interface MusicOptions {
 
 export interface Job {
   id: string;
-  kind: "video" | "music";
+  kind: "video" | "music" | "sfx";
   prompt: string;
   settings: Partial<JobSettings> & Record<string, unknown>;
   state: JobState;
@@ -94,6 +103,10 @@ export interface JobSettings {
   music_track: string;
   music_title: string;
   music_volume: number;
+  ambience: "off" | "auto" | "library";
+  ambience_track: string;
+  ambience_title: string;
+  ambience_volume: number;
 }
 
 export const isActive = (job: Job) => job.state === "queued" || job.state === "running";
@@ -125,6 +138,7 @@ export const listVoices = () => fetch("/api/voices").then((r) => json<Voice[]>(r
 export const getMusicOptions = () => fetch("/api/music/options").then((r) => json<MusicOptions>(r));
 export const draftSong = (description: string, instrumental: boolean, duration: number) =>
   post("/api/music/draft", { description, instrumental, duration }).then((r) => json<Partial<MusicSettings>>(r));
+export const createSfx = (settings: SfxSettings) => post("/api/sfx", settings).then((r) => json<Job>(r));
 export const createMusic = (settings: MusicSettings) => post("/api/music", settings).then((r) => json<Job>(r));
 export const listJobs = () => fetch("/api/jobs").then((r) => json<Job[]>(r));
 export const createJob = (prompt: string, settings: JobSettings) =>
@@ -134,8 +148,13 @@ export const rerunJob = (id: string, keepSeed = false) =>
   post(`/api/jobs/${id}/rerun`, { keep_seed: keepSeed }).then((r) => json<Job>(r));
 export const regenerateScene = (id: string, index: number, prompt?: string) =>
   post(`/api/jobs/${id}/scenes/${index}/regenerate`, { prompt: prompt || null }).then((r) => json<Job>(r));
-export const changeMusic = (id: string, choice: Pick<JobSettings, "music" | "music_track" | "music_title" | "music_volume">) =>
-  post(`/api/jobs/${id}/music`, choice).then((r) => json<Job>(r));
+export type SoundFields = Pick<
+  JobSettings,
+  "music" | "music_track" | "music_title" | "music_volume" | "ambience" | "ambience_track" | "ambience_title" | "ambience_volume"
+>;
+export const changeSound = (id: string, choice: SoundFields) => post(`/api/jobs/${id}/sound`, choice).then((r) => json<Job>(r));
+export const regenerateSound = (id: string, layer: "music" | "ambience") =>
+  post(`/api/jobs/${id}/sound/regenerate`, { layer }).then((r) => json<Job>(r));
 export const deleteJob = (id: string) => fetch(`/api/jobs/${id}`, { method: "DELETE" }).then((r) => json(r));
 
 /** Stream live updates for one job; returns a function that closes the socket. */

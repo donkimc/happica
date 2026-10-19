@@ -12,7 +12,7 @@ from pathlib import Path
 from comfy_client import ComfyClient
 from config import OUTPUTS_DIR
 
-from . import assemble, captions, image, music, scenes, songwriter, tts, video
+from . import assemble, captions, image, music, scenes, sfx, songwriter, tts, video
 
 LEAD = 0.35  # narration starts this long after its scene appears
 TAIL = 0.4   # breathing room after the narration before the next scene's crossfade
@@ -83,6 +83,7 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
         report("video", (i + 1) / len(shots), result=result)
 
     result["music"] = await _pick_music(job, job_dir, result, report, music_comfy)
+    result["ambience"] = await _pick_ambience(job, job_dir, result, report, music_comfy)
     report("assemble", 0.0)
     result.update(await _assemble(job_dir, settings, result))
     return result
@@ -120,10 +121,14 @@ async def regenerate_scene(job: dict, job_dir: Path, report, comfy: ComfyClient,
     return result
 
 
-async def change_music(job: dict, job_dir: Path, report, music_comfy: ComfyClient) -> dict:
-    """Swap a finished video's background music (settings already updated) and re-mix; no images or clips are redone."""
+async def change_sound(job: dict, job_dir: Path, report, music_comfy: ComfyClient, regenerate: set[str]) -> dict:
+    """Swap a finished video's music and/or ambience (settings already updated) and re-mix; no images or clips
+    are redone. Only the layers named in `regenerate` are picked again (a new auto score costs minutes)."""
     result = dict(job["result"])
-    result["music"] = await _pick_music(job, job_dir, result, report, music_comfy)
+    if "music" in regenerate:
+        result["music"] = await _pick_music(job, job_dir, result, report, music_comfy)
+    if "ambience" in regenerate:
+        result["ambience"] = await _pick_ambience(job, job_dir, result, report, music_comfy)
     report("assemble", 0.0)
     result.update(await _assemble(job_dir, job["settings"], result))
     return result
@@ -166,11 +171,33 @@ async def _pick_music(job: dict, job_dir: Path, result: dict, report, music_comf
             "tags": draft["tags"]}
 
 
-def music_gain(settings: dict, narrated: bool) -> float:
-    """The music level slider (0–1) is relative to the voice. Without narration the music is the only sound,
-    so the same slider position plays it louder (the default 0.3 becomes 0.75)."""
-    level = settings.get("music_volume", 0.3)
-    return level if narrated else min(1.0, level * 2.5)
+async def _pick_ambience(job: dict, job_dir: Path, result: dict, report, music_comfy: ComfyClient) -> dict | None:
+    """A looping background ambience: none, a Sound library take, or a new one described from the story."""
+    settings = job["settings"]
+    choice = settings.get("ambience", "off")
+    if choice == "library":
+        track = settings.get("ambience_track") or ""
+        if not (OUTPUTS_DIR / track).is_file():
+            raise RuntimeError("The chosen library sound no longer exists — pick another in Change sound.")
+        return {"source": "library", "track": track, "title": settings.get("ambience_title", "")}
+    if choice != "auto":
+        return None
+
+    report("ambience: describing the setting", 0.0)
+    story = job["prompt"] if settings.get("scene_mode") == "llm" else " / ".join(result["scenes"])
+    description = await sfx.enhance(f"The background ambience (environment sounds only, no music) for this scene: {story[:800]}")
+    # Loops cover any length, so a short take is enough and keeps it fast
+    seconds = min(30.0, max(8.0, _total(settings, result)))
+    takes = await sfx.generate(music_comfy, description, seconds, True, 1, random.randrange(2**31), job_dir / "ambience",
+                               f"{job_dir.name}_amb", lambda stage, p: report(f"ambience: {stage}", p))
+    return {"source": "auto", "track": takes[0]["flac"], "mp3": takes[0]["mp3"], "title": description}
+
+
+def level(settings: dict, key: str, default: float, narrated: bool) -> float:
+    """Level sliders (0–1) are relative to the voice. Without narration the beds are the only sound,
+    so the same slider position plays them louder (e.g. the music default 0.3 becomes 0.75)."""
+    value = settings.get(key, default)
+    return value if narrated else min(1.0, value * 2.5)
 
 
 async def _assemble(job_dir: Path, settings: dict, result: dict) -> dict:
@@ -190,11 +217,15 @@ async def _assemble(job_dir: Path, settings: dict, result: dict) -> dict:
             for i, line in enumerate(result["narration"]):
                 cues += captions.cues_for(line, starts[i] + LEAD, result["speech"][i], captions.max_chars_for(settings["width"]))
 
-    track = result.get("music") and settings.get("music", "off") != "off" and OUTPUTS_DIR / result["music"]["track"]
+    narrated = bool(narration_track)
+    beds = []
+    if result.get("music") and settings.get("music", "off") != "off":
+        beds.append((OUTPUTS_DIR / result["music"]["track"], level(settings, "music_volume", 0.3, narrated)))
+    if result.get("ambience") and settings.get("ambience", "off") != "off":
+        beds.append((OUTPUTS_DIR / result["ambience"]["track"], level(settings, "ambience_volume", 0.35, narrated)))
     final = await assemble.finalize(silent, job_dir / "final.mp4", total, narration_track, cues,
                                     burn=settings.get("subtitles") == "burn",
-                                    size=(settings["width"], settings["height"]),
-                                    music=track or None, music_gain=music_gain(settings, bool(narration_track)))
+                                    size=(settings["width"], settings["height"]), beds=beds)
     silent.unlink()
     if not cues:
         return {"video": _rel(job_dir, final), "subtitles": None, "subtitles_vtt": None}

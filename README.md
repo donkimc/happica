@@ -48,6 +48,14 @@ curl -L -o models/text_encoders/qwen_0.6b_ace15.safetensors $B/text_encoders/qwe
 curl -L -o models/vae/ace_1.5_vae.safetensors $B/vae/ace_1.5_vae.safetensors
 ```
 
+Sound effects (Stable Audio 3 small SFX, 3.5 GB):
+
+```bash
+B=https://huggingface.co/Comfy-Org/stable-audio-3/resolve/main
+curl -L -o models/checkpoints/stable_audio_3_small_sfx.safetensors $B/checkpoints/stable_audio_3_small_sfx.safetensors
+curl -L -o models/text_encoders/t5gemma_b_b_ul2.safetensors $B/text_encoders/t5gemma_b_b_ul2.safetensors
+```
+
 Narration voices (Kokoro TTS, 354 MB):
 
 ```bash
@@ -84,6 +92,7 @@ Then open http://127.0.0.1:5173. Logs go to `outputs/logs/`.
 | Pan & zoom clip | < 1 s |
 | AI motion clip (LTX-Video, 3 s at 768×512) | ~6.5 min |
 | Song, 2 takes (ACE-Step 1.5) | ~2 min for 30 s, ~3 min for 1 min |
+| Sound effect, 2 takes (Stable Audio 3 small SFX) | ~5 s for 10 s, ~15 s for 45 s (+~8 s with AI detail) |
 
 ComfyUI starts with two flags that matter on a 16 GB Mac:
 
@@ -125,3 +134,8 @@ Typical jobs: a 4-scene narrated story with pan & zoom takes about 1.5–2 minut
 3. ✅ M3 — Simple mode: describe a song; qwen2.5:7b drafts title, tags, lyrics (sized to the length) and BPM/key/language for review, or creates directly
 4. ✅ M4 — Background music in videos: Off / Auto (LLM picks a style from the story, ACE-Step scores the exact length) / From library; looped or trimmed, faded, sidechain-ducked under narration, level control; Change music re-mixes a finished video
 5. M5 — Polish: guide, presets with music
+
+## Sound effects
+
+- ✅ Sound FX tab: description with quick ideas, 3–45 s, seamless loops (equal-power tail-to-head crossfade), AI-detailed descriptions, 2 takes, library
+- ✅ Ambience layer in videos: Off / Auto (AI describes the setting, makes a loop) / From Sound library; mixed with the music and ducked under the narration; Change sound swaps music and ambience, New score / New ambience regenerate Auto layers

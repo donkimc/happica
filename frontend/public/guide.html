@@ -75,6 +75,7 @@
       <li><a href="#tips">Tips for better videos</a></li>
       <li><a href="#speed">How long things take</a></li>
       <li><a href="#music">Music Studio</a></li>
+      <li><a href="#sfx">Sound effects</a></li>
       <li><a href="#trouble">Troubleshooting</a></li>
       <li><a href="#files">Where files are</a></li>
     </ol>
@@ -155,7 +156,7 @@ scripts/start.sh</code></pre>
         <tr><td><strong>Re-run</strong></td><td>Makes a new video from the same text and settings with new seeds — different images.</td></tr>
         <tr><td><strong>Re-run, same seed</strong></td><td>Reproduces the same images exactly. Handy after changing nothing but, say, the voice.</td></tr>
         <tr><td><strong>Edit &amp; re-run</strong></td><td>Loads the text and settings back into the form so you can tweak them and generate again.</td></tr>
-        <tr><td><strong>Change music</strong></td><td>Swap the background music (Off, Auto, or a library song) or change its level. Only the soundtrack is rebuilt — a few seconds for a library song, 1–2 minutes for a new Auto score. The line under the video shows which music is playing.</td></tr>
+        <tr><td><strong>Change sound</strong></td><td>Swap the background music and ambience (Off, Auto, or from your libraries) or change their levels. Only the soundtrack is rebuilt — a few seconds for library picks or level changes, 1–2 minutes for a new Auto score. The lines under the video show what is playing.</td></tr>
         <tr><td><strong>Delete</strong></td><td>Removes the job and all its files.</td></tr>
         <tr><td><strong>Cancel</strong></td><td>Stops a queued or running job.</td></tr>
       </tbody>
@@ -222,7 +223,22 @@ scripts/start.sh</code></pre>
   </ul>
   <p class="note">Songs you make here appear in the video form under <strong>Background music → From Music library</strong>.</p>
 
-  <h2 id="trouble">10. Troubleshooting</h2>
+  <h2 id="sfx">10. Sound effects</h2>
+  <p>The <strong>Sound FX</strong> tab makes effects and ambiences from a description — sea waves, a summer night, a Buddhist temple, falling leaves, rain on a window, a door creaking — using Stable Audio 3, a local model made for sound effects. Click a <strong>quick idea</strong> to fill in a description, or write your own.</p>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><td><strong>Length</strong></td><td>3–45 seconds.</td></tr>
+        <tr><td><strong>Seamless loop</strong></td><td>Blends the end into the start so the sound can repeat forever without a click or jump. Use it for ambiences (waves, rain, crickets); leave it off for one-shots (a door, footsteps, a whoosh). Loops repeat when you preview them.</td></tr>
+        <tr><td><strong>AI adds detail</strong></td><td>The local AI turns a short idea (“night sound”) into a detailed sound description before generating. The card shows the description it used.</td></tr>
+        <tr><td><strong>Takes</strong></td><td>Two variations to choose from, or one.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Ambience in videos</h3>
+  <p>In the Video tab, <strong>Ambience</strong> adds an environment bed under the whole video, alongside the music: <strong>Auto</strong> describes the setting from your story and makes a seamless loop (about 30 s extra), or pick any sound from your <strong>Sound library</strong>. Like the music, it dips while the narrator speaks. Finished videos can swap both with <strong>Change sound</strong>; <strong>New score</strong> / <strong>New ambience</strong> make a fresh Auto version.</p>
+
+  <h2 id="trouble">11. Troubleshooting</h2>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Problem</th><th>What to do</th></tr></thead>
@@ -238,7 +254,7 @@ scripts/start.sh</code></pre>
     </table>
   </div>
 
-  <h2 id="files">11. Where files are</h2>
+  <h2 id="files">12. Where files are</h2>
   <p>Everything is stored locally inside the project folder:</p>
   <div class="table-wrap">
     <table>
@@ -249,8 +265,9 @@ scripts/start.sh</code></pre>
         <tr><td><code>outputs/&lt;job&gt;/clips/</code></td><td>Each scene's video clip</td></tr>
         <tr><td><code>outputs/&lt;job&gt;/audio/</code></td><td>Each scene's narration (WAV)</td></tr>
         <tr><td><code>outputs/&lt;song&gt;/v1.mp3</code>, <code>v2.mp3</code></td><td>A song's two takes (also as lossless <code>.flac</code>)</td></tr>
+        <tr><td><code>outputs/&lt;sound&gt;/s1.mp3</code>, <code>s2.mp3</code></td><td>A sound effect's takes (also <code>.flac</code>)</td></tr>
         <tr><td><code>outputs/logs/</code></td><td>Logs for troubleshooting</td></tr>
-        <tr><td><code>models/</code></td><td>The AI models (~28 GB)</td></tr>
+        <tr><td><code>models/</code></td><td>The AI models (~31 GB)</td></tr>
       </tbody>
     </table>
   </div>

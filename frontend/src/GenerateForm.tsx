@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Health, Job, JobSettings, listVoices, Voice } from "./api";
-import MusicPicker from "./MusicPicker";
+import SoundPicker from "./MusicPicker";
 import { estimateSeconds, formatDuration, matches, PRESETS } from "./presets";
 
 export const DEFAULTS: JobSettings = {
@@ -18,6 +18,10 @@ export const DEFAULTS: JobSettings = {
   music_track: "",
   music_title: "",
   music_volume: 0.3,
+  ambience: "off",
+  ambience_track: "",
+  ambience_title: "",
+  ambience_volume: 0.35,
 };
 
 const PLACEHOLDERS = {
@@ -30,13 +34,14 @@ interface Props {
   settings: JobSettings;
   health: Health | null;
   library: Job[];
+  sfxLibrary: Job[];
   onPrompt: (p: string) => void;
   onSettings: (s: JobSettings) => void;
   onSubmit: () => void;
   error: string | null;
 }
 
-export default function GenerateForm({ prompt, settings, health, library, onPrompt, onSettings, onSubmit, error }: Props) {
+export default function GenerateForm({ prompt, settings, health, library, sfxLibrary, onPrompt, onSettings, onSubmit, error }: Props) {
   const [voices, setVoices] = useState<Voice[]>([]);
   useEffect(() => {
     listVoices().then(setVoices).catch(() => {});
@@ -184,7 +189,7 @@ export default function GenerateForm({ prompt, settings, health, library, onProm
         </label>
       </div>
 
-      <MusicPicker value={settings} library={library} narrated={settings.narrate} onChange={set} />
+      <SoundPicker value={settings} musicLibrary={library} sfxLibrary={sfxLibrary} narrated={settings.narrate} onChange={set} />
 
       <div className="row">
         <div className="generate">

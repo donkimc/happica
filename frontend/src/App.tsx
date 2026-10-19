@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   cancelJob,
-  changeMusic,
+  changeSound,
   createJob,
   deleteJob,
   getHealth,
@@ -11,6 +11,7 @@ import {
   JobSettings,
   listJobs,
   regenerateScene,
+  regenerateSound,
   rerunJob,
   watchJob,
 } from "./api";
@@ -18,9 +19,15 @@ import GenerateForm, { DEFAULTS } from "./GenerateForm";
 import JobDetail from "./JobDetail";
 import JobGallery from "./JobGallery";
 import MusicStudio from "./MusicStudio";
+import SfxStudio from "./SfxStudio";
 
-type Tab = "video" | "music";
-const tabFromHash = (): Tab => (location.hash === "#music" ? "music" : "video");
+type Tab = "video" | "music" | "sfx";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "video", label: "Video" },
+  { id: "music", label: "Music" },
+  { id: "sfx", label: "Sound FX" },
+];
+const tabFromHash = (): Tab => TABS.find((t) => `#${t.id}` === location.hash && t.id !== "video")?.id ?? "video";
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -95,11 +102,12 @@ export default function App() {
 
   const videoJobs = jobs.filter((j) => j.kind === "video");
   const musicJobs = jobs.filter((j) => j.kind === "music");
+  const sfxJobs = jobs.filter((j) => j.kind === "sfx");
   const selected = videoJobs.find((j) => j.id === selectedId);
   const switchTab = (t: Tab) => {
     setError(null);
     setTab(t);
-    history.replaceState(null, "", t === "music" ? "#music" : location.pathname);
+    history.replaceState(null, "", t === "video" ? location.pathname : `#${t}`);
   };
 
   return (
@@ -108,12 +116,11 @@ export default function App() {
         <div className="brand">
           <h1>Happica</h1>
           <nav className="tabs" aria-label="Studio">
-            <button className={tab === "video" ? "on" : ""} aria-current={tab === "video"} onClick={() => switchTab("video")}>
-              Video
-            </button>
-            <button className={tab === "music" ? "on" : ""} aria-current={tab === "music"} onClick={() => switchTab("music")}>
-              Music
-            </button>
+            {TABS.map((t) => (
+              <button key={t.id} className={tab === t.id ? "on" : ""} aria-current={tab === t.id} onClick={() => switchTab(t.id)}>
+                {t.label}
+              </button>
+            ))}
           </nav>
         </div>
         <div className="header-right">
@@ -124,7 +131,16 @@ export default function App() {
         </div>
       </header>
 
-      {tab === "music" ? (
+      {tab === "sfx" ? (
+        <SfxStudio
+          jobs={sfxJobs}
+          health={health}
+          upsert={upsert}
+          remove={(id) => setJobs((prev) => prev.filter((j) => j.id !== id))}
+          act={act}
+          error={error}
+        />
+      ) : tab === "music" ? (
         <MusicStudio
           jobs={musicJobs}
           health={health}
@@ -140,6 +156,7 @@ export default function App() {
         settings={settings}
         health={health}
         library={musicJobs}
+        sfxLibrary={sfxJobs}
         onPrompt={setPrompt}
         onSettings={setSettings}
         onSubmit={() => act(async () => select(await createJob(prompt, settings)))}
@@ -171,7 +188,9 @@ export default function App() {
           }
           onRegenerate={(index, p) => act(async () => upsert(await regenerateScene(selected.id, index, p)))}
           library={musicJobs}
-          onChangeMusic={(choice) => act(async () => upsert(await changeMusic(selected.id, choice)))}
+          sfxLibrary={sfxJobs}
+          onChangeSound={(choice) => act(async () => upsert(await changeSound(selected.id, choice)))}
+          onNewAuto={(layer) => act(async () => upsert(await regenerateSound(selected.id, layer)))}
         />
       )}
 

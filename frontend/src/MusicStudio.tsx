@@ -13,8 +13,8 @@ import {
   MusicSettings,
   outputUrl,
   rerunJob,
-  Track,
 } from "./api";
+import TrackPlayer, { fmtTime } from "./TrackPlayer";
 
 export const MUSIC_DEFAULTS: MusicSettings = {
   title: "",
@@ -47,7 +47,6 @@ const languageName = (code: string) => {
   }
 };
 
-const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /** ~35 s to load the models, then about 1.2 s of work per second of song, per variation (M2, 16 GB). */
 const estimateSeconds = (s: MusicSettings) => 35 + s.variations * s.duration * 1.2;
@@ -394,7 +393,13 @@ function SongCard({ job, onCancel, onRerun, onEdit, onDelete }: CardProps) {
       {job.error && <p className="error">{job.error}</p>}
 
       {result?.tracks.map((t, i) => (
-        <TrackPlayer key={t.mp3} job={job} track={t} label={result.tracks.length > 1 ? `Take ${i + 1}` : "Song"} />
+        <TrackPlayer
+          key={t.mp3}
+          job={job}
+          track={t}
+          label={result.tracks.length > 1 ? `Take ${i + 1}` : "Song"}
+          downloadName={`${s.title || "song"} - ${result.tracks.length > 1 ? `Take ${i + 1}` : "Song"}.mp3`}
+        />
       ))}
 
       <div className="actions">
@@ -415,70 +420,6 @@ function SongCard({ job, onCancel, onRerun, onEdit, onDelete }: CardProps) {
       </div>
       {showLyrics && <pre className="lyrics">{s.lyrics}</pre>}
     </article>
-  );
-}
-
-function TrackPlayer({ job, track, label }: { job: Job; track: Track; label: string }) {
-  const audio = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [time, setTime] = useState(0);
-  const src = outputUrl(job, track.mp3);
-  const played = time / (track.duration || 1);
-
-  function seek(e: React.MouseEvent<SVGSVGElement>) {
-    const box = e.currentTarget.getBoundingClientRect();
-    const a = audio.current;
-    if (!a) return;
-    a.currentTime = ((e.clientX - box.left) / box.width) * track.duration;
-    if (a.paused) a.play();
-  }
-
-  return (
-    <div className="track">
-      <button
-        className="play"
-        aria-label={playing ? `Pause ${label}` : `Play ${label}`}
-        onClick={() => (audio.current?.paused ? audio.current.play() : audio.current?.pause())}
-      >
-        {playing ? "❚❚" : "▶"}
-      </button>
-      <div className="track-main">
-        <div className="track-meta">
-          <span>{label}</span>
-          <span className="muted">
-            {fmtTime(time)} / {fmtTime(track.duration)}
-          </span>
-        </div>
-        {/* SVG with a stretched viewBox, so all bars fit any width (one unit per bar, 70% bar / 30% gap) */}
-        <svg
-          className="wave"
-          viewBox={`0 0 ${track.peaks.length} 100`}
-          preserveAspectRatio="none"
-          onClick={seek}
-          role="slider"
-          aria-label={`Seek ${label}`}
-          aria-valuenow={Math.round(time)}
-          aria-valuemax={Math.round(track.duration)}
-        >
-          {track.peaks.map((p, i) => {
-            const h = Math.max(6, p * 100);
-            return <rect key={i} x={i + 0.15} y={(100 - h) / 2} width={0.7} height={h} className={i / track.peaks.length < played ? "on" : ""} />;
-          })}
-        </svg>
-      </div>
-      <a className="download" href={src} download={`${(job.settings as Partial<MusicSettings>).title || "song"} - ${label}.mp3`}>
-        MP3
-      </a>
-      <audio
-        ref={audio}
-        src={src}
-        preload="none"
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
-        onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-      />
-    </div>
   );
 }
 

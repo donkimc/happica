@@ -52,6 +52,7 @@ export function estimateSeconds(s: JobSettings, sceneCount: number): number {
     const videoSeconds = n * (s.narrate ? Math.max(s.clip_seconds, 6) : s.clip_seconds);
     t += 15 + 35 + videoSeconds * 1.2; // style from the LLM, then one ACE-Step take
   }
+  if (s.ambience === "auto" && s.motion !== "none") t += 10 + 25; // description from the LLM, then one short loop
   return t;
 }
 

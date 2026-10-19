@@ -12,7 +12,7 @@ import httpx
 import pipeline
 from comfy_client import ComfyClient
 from config import FRONTEND_ORIGIN, MUSIC_COMFY_URL, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR
-from pipeline import music, songwriter, tts
+from pipeline import music, sfx, songwriter, tts
 from jobs import JobRunner, JobStore
 
 comfy = ComfyClient()
@@ -21,6 +21,7 @@ store = JobStore()
 runner = JobRunner(store, {
     "video": lambda job, job_dir, report: pipeline.run(job, job_dir, report, comfy, music_comfy),
     "music": lambda job, job_dir, report: music.run(job, job_dir, report, music_comfy),
+    "sfx": lambda job, job_dir, report: sfx.run(job, job_dir, report, music_comfy),  # audio models share the GPU-only instance
 })
 
 
@@ -58,14 +59,19 @@ class JobRequest(BaseModel):
     music_track: str = ""  # a library take's .flac path under outputs/, when music == "library"
     music_title: str = ""
     music_volume: float = Field(default=0.3, ge=0, le=1)
+    ambience: str = Field(default="off", pattern="^(off|auto|library)$")
+    ambience_track: str = ""  # a Sound library take's .flac path under outputs/, when ambience == "library"
+    ambience_title: str = ""
+    ambience_volume: float = Field(default=0.35, ge=0, le=1)
 
 
-def _check_music_track(music: str, track: str) -> None:
-    if music != "library":
+def _check_library_track(choice: str, track: str, what: str = "song from the Music library") -> None:
+    """A library pick must be a generated .flac inside outputs/<job>/ (no paths elsewhere on the Mac)."""
+    if choice != "library":
         return
     path = (OUTPUTS_DIR / track).resolve()
     if not track or path.parent.parent != OUTPUTS_DIR.resolve() or path.suffix != ".flac" or not path.is_file():
-        raise HTTPException(400, "Pick a song from the Music library")
+        raise HTTPException(400, f"Pick a {what}")
 
 
 @app.get("/api/health")
@@ -98,28 +104,58 @@ async def list_voices():
 
 @app.post("/api/jobs")
 async def create_job(req: JobRequest):
-    _check_music_track(req.music, req.music_track)
+    _check_library_track(req.music, req.music_track)
+    _check_library_track(req.ambience, req.ambience_track, "sound from the Sound library")
     return runner.submit(req.prompt, req.model_dump(exclude={"prompt"}))
 
 
-class MusicChange(BaseModel):
+class SoundChange(BaseModel):
     music: str = Field(pattern="^(off|auto|library)$")
     music_track: str = ""
     music_title: str = ""
     music_volume: float = Field(default=0.3, ge=0, le=1)
+    ambience: str = Field(default="off", pattern="^(off|auto|library)$")
+    ambience_track: str = ""
+    ambience_title: str = ""
+    ambience_volume: float = Field(default=0.35, ge=0, le=1)
 
 
-@app.post("/api/jobs/{job_id}/music")
-async def change_music(job_id: str, req: MusicChange):
-    """Replace a video's background music or its level and re-mix; images and clips stay as they are."""
+@app.post("/api/jobs/{job_id}/sound")
+async def change_sound(job_id: str, req: SoundChange):
+    """Replace a video's music and/or ambience or their levels and re-mix; images and clips stay as they are.
+
+    A layer is only picked again when its choice changed, or when it is "auto" and was asked for again
+    (so moving a level slider never re-generates a score)."""
     job = _get_or_404(job_id)
     _require_idle(job)
     if job["kind"] != "video" or not (job["result"] or {}).get("video"):
-        raise HTTPException(400, "Only finished videos can change music")
-    _check_music_track(req.music, req.music_track)
-    store.update(job_id, settings={**job["settings"], **req.model_dump()})
-    task = lambda j, job_dir, report: pipeline.change_music(j, job_dir, report, music_comfy)
-    return runner.enqueue(job_id, task, stage="music")
+        raise HTTPException(400, "Only finished videos can change their sound")
+    _check_library_track(req.music, req.music_track)
+    _check_library_track(req.ambience, req.ambience_track, "sound from the Sound library")
+    old, new = job["settings"], req.model_dump()
+    regenerate = {
+        layer for layer in ("music", "ambience")
+        if new[layer] != old.get(layer, "off") or new[f"{layer}_track"] != old.get(f"{layer}_track", "")
+        or (new[layer] == "auto" and not (job["result"] or {}).get(layer))
+    }
+    store.update(job_id, settings={**old, **new})
+    task = lambda j, job_dir, report: pipeline.change_sound(j, job_dir, report, music_comfy, regenerate)
+    return runner.enqueue(job_id, task, stage="sound")
+
+
+class AutoAgain(BaseModel):
+    layer: str = Field(pattern="^(music|ambience)$")
+
+
+@app.post("/api/jobs/{job_id}/sound/regenerate")
+async def regenerate_sound(job_id: str, req: AutoAgain):
+    """Make a fresh auto score or ambience for a finished video, keeping everything else."""
+    job = _get_or_404(job_id)
+    _require_idle(job)
+    if job["settings"].get(req.layer) != "auto":
+        raise HTTPException(400, f"{req.layer} isn't set to Auto")
+    task = lambda j, job_dir, report: pipeline.change_sound(j, job_dir, report, music_comfy, {req.layer})
+    return runner.enqueue(job_id, task, stage=req.layer)
 
 
 @app.get("/api/jobs")
@@ -162,6 +198,20 @@ async def draft_song(req: DraftRequest):
         return await songwriter.draft(req.description, req.instrumental, req.duration, await music_options())
     except RuntimeError as e:
         raise HTTPException(503, str(e))
+
+
+class SfxRequest(BaseModel):
+    prompt: str = Field(min_length=2, max_length=500)
+    duration: float = Field(default=10, ge=1, le=47)
+    loop: bool = False
+    enhance: bool = True
+    variations: int = Field(default=2, ge=1, le=2)
+    seed: int | None = None
+
+
+@app.post("/api/sfx")
+async def create_sfx(req: SfxRequest):
+    return runner.submit(req.prompt.strip()[:80], req.model_dump(), "sfx")
 
 
 @app.get("/api/music/options")
@@ -228,7 +278,7 @@ async def delete_job(job_id: str):
 async def cancel_job(job_id: str):
     job = _get_or_404(job_id)
     if job["state"] == "running":
-        await (music_comfy if job["kind"] == "music" else comfy).interrupt()
+        await (comfy if job["kind"] == "video" else music_comfy).interrupt()
     if job["state"] in ("queued", "running"):
         job = store.update(job_id, state="cancelled")
     return job

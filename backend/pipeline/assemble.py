@@ -54,8 +54,9 @@ def mix_narration(audio: list[Path | None], starts: list[float], lead: float, to
 
 async def finalize(video: Path, out: Path, total: float, narration: Path | None = None,
                    cues: list[captions.Cue] | None = None, burn: bool = False,
-                   size: tuple[int, int] = (768, 512), music: Path | None = None, music_gain: float = 0.3) -> Path:
-    """Add narration, background music (ducked under the narration) and subtitles.
+                   size: tuple[int, int] = (768, 512), beds: list[tuple[Path, float]] | None = None) -> Path:
+    """Add narration, background beds (music, ambience — each looped to length at its own gain, and ducked
+    together under the narration) and subtitles.
 
     Subtitles go in as a soft track, and are also burned into the picture when `burn`.
     """
@@ -68,12 +69,17 @@ async def finalize(video: Path, out: Path, total: float, narration: Path | None 
     if narration:
         args += ["-i", str(narration)]
         voice, n_inputs = f"{n_inputs}:a", n_inputs + 1
-    if music:
-        args += ["-stream_loop", "-1", "-i", str(music)]  # loop a short track under a long video
-        tune, n_inputs = f"{n_inputs}:a", n_inputs + 1
-        stereo = "aformat=sample_rates=48000:channel_layouts=stereo"
-        graph.append(f"[{tune}]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,{stereo},volume={music_gain:.3f},"
-                     f"afade=t=in:d=1,afade=t=out:st={max(0.0, total - 2):.3f}:d=2[music]")
+    stereo = "aformat=sample_rates=48000:channel_layouts=stereo"
+    for k, (bed, gain) in enumerate(beds or []):
+        args += ["-stream_loop", "-1", "-i", str(bed)]  # loop a short track under a long video
+        graph.append(f"[{n_inputs}:a]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,{stereo},volume={gain:.3f},"
+                     f"afade=t=in:d=1,afade=t=out:st={max(0.0, total - 2):.3f}:d=2[bed{k}]")
+        n_inputs += 1
+    if beds:
+        if len(beds) > 1:
+            graph.append("".join(f"[bed{k}]" for k in range(len(beds))) + f"amix=inputs={len(beds)}:normalize=0[music]")
+        else:
+            graph[-1] = graph[-1].replace("[bed0]", "[music]")
         if narration:
             # Duck: the music drops whenever the narration speaks, then comes back up between lines
             graph.append(f"[{voice}]{stereo},asplit=2[voice][key]")
