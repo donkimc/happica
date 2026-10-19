@@ -85,3 +85,12 @@ button.link:disabled { color: var(--muted); }
 }
 .badge.failed { background: var(--bad); } .badge.running, .badge.queued { background: var(--accent); }
 .tile-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Phase 6: story mode */
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; padding: 3px; gap: 3px; margin-bottom: 14px; }
+.segmented button { background: transparent; color: var(--muted); padding: 6px 12px; font-weight: 500; font-size: 13px; border-radius: 6px; }
+.segmented button.on { background: var(--accent); color: white; }
+label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: 14px; padding-bottom: 9px; }
+select:disabled { opacity: 0.5; }
+.narration { font-size: 12px; font-style: italic; color: var(--text); margin: 4px 0 0; }
+.muted a { color: var(--accent); }

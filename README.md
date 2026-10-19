@@ -36,6 +36,20 @@ curl -L -o models/text_encoders/t5xxl_fp8_e4m3fn.safetensors https://huggingface
 | LTX-Video 2B 0.9.8 distilled | Image → video ("AI motion") | 6.3 GB |
 | T5-XXL fp8 | LTX-Video's text encoder (runs on CPU) | 4.9 GB |
 
+Narration voices (Kokoro TTS, 354 MB):
+
+```bash
+mkdir -p models/tts && for f in kokoro-v1.0.onnx voices-v1.0.bin; do curl -L -o models/tts/$f https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/$f; done
+```
+
+Story mode needs [Ollama](https://ollama.com) running with a small model:
+
+```bash
+ollama pull qwen2.5:3b
+```
+
+Set `OLLAMA_MODEL=qwen2.5:7b` before `scripts/start.sh` for better storyboards (characters stay more consistent across scenes).
+
 Check each model's license before any commercial use.
 
 ## Run
@@ -51,6 +65,8 @@ Then open http://127.0.0.1:5173. Logs go to `outputs/logs/`.
 | Step | Time |
 |---|---|
 | Image (SDXL-Turbo, 768×512) | ~6 s (first one ~30 s while the model loads) |
+| Story → scenes (qwen2.5:3b) | ~15 s |
+| Narration (Kokoro) | ~5–10 s per scene |
 | Pan & zoom clip | < 1 s |
 | AI motion clip (LTX-Video, 3 s at 768×512) | ~6.5 min |
 
@@ -66,7 +82,7 @@ ComfyUI starts with two flags that matter on a 16 GB Mac:
 | `backend/app.py` | REST + WebSocket API |
 | `backend/jobs.py` | SQLite job store and a single sequential worker |
 | `backend/comfy_client.py` | ComfyUI API client (queue, progress, download) |
-| `backend/pipeline/` | Stages: `scenes` → `image` → `video` → `assemble` |
+| `backend/pipeline/` | Stages: `scenes` → `tts` → `image` → `video` → `assemble` (+ `captions`) |
 | `backend/workflows/` | ComfyUI workflow JSONs (API format) |
 | `frontend/` | Web UI |
 | `engine/ComfyUI/` | ComfyUI install (own venv; not committed) |
@@ -80,5 +96,5 @@ ComfyUI starts with two flags that matter on a 16 GB Mac:
 3. ✅ Ken Burns motion + crossfaded ffmpeg assembly → first end-to-end video
 4. ✅ History gallery, re-run (new or same seed), edit & re-run, regenerate a single scene, delete
 5. ✅ AI motion with LTX-Video image-to-video
-6. Story mode: LLM scene splitting (Ollama), TTS narration, subtitles
+6. ✅ Story mode: LLM storyboard (Ollama), Kokoro narration, timed subtitles (burned in, soft track, .srt/.vtt)
 7. Presets and memory tuning for 16 GB

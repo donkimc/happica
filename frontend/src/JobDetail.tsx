@@ -29,7 +29,15 @@ export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, on
       )}
       {job.error && <p className="error">{job.error}</p>}
 
-      {result?.video && <video key={job.updated} src={outputUrl(job, result.video)} controls />}
+      {result?.video && (
+        <video key={job.updated} src={outputUrl(job, result.video)} controls>
+          {result.subtitles_vtt && (
+            // Burned-in captions are already in the picture; only "toggleable" jobs show this track by default
+            <track kind="subtitles" label="Narration" src={outputUrl(job, result.subtitles_vtt)}
+                   default={job.settings.subtitles === "soft"} />
+          )}
+        </video>
+      )}
 
       <div className="actions">
         {active ? (
@@ -59,13 +67,24 @@ export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, on
               index={i}
               src={src}
               prompt={result.scenes[i]}
+              narration={result.narration?.[i]}
               disabled={active}
               onRegenerate={(p) => onRegenerate(i, p)}
             />
           ))}
         </div>
       )}
-      {result?.seed !== undefined && <p className="muted">Seed {result.seed}</p>}
+      <p className="muted">
+        {result?.seed !== undefined && <>Seed {result.seed}</>}
+        {result?.subtitles && (
+          <>
+            {" · "}
+            <a href={outputUrl(job, result.subtitles)} download>
+              Subtitles (.srt)
+            </a>
+          </>
+        )}
+      </p>
     </article>
   );
 }
@@ -75,11 +94,12 @@ interface SceneProps {
   index: number;
   src: string;
   prompt: string;
+  narration?: string;
   disabled: boolean;
   onRegenerate: (prompt: string) => void;
 }
 
-function Scene({ job, index, src, prompt, disabled, onRegenerate }: SceneProps) {
+function Scene({ job, index, src, prompt, narration, disabled, onRegenerate }: SceneProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(prompt);
 
@@ -121,6 +141,7 @@ function Scene({ job, index, src, prompt, disabled, onRegenerate }: SceneProps) 
           </button>
         </figcaption>
       )}
+      {narration && narration !== prompt && <p className="narration">“{narration}”</p>}
     </figure>
   );
 }

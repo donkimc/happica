@@ -3,3 +3,7 @@ uvicorn[standard]>=0.32
 httpx>=0.27
 websockets>=13
 pydantic>=2.9
+kokoro-onnx>=0.4
+soundfile>=0.12
+numpy>=1.26
+pillow>=10

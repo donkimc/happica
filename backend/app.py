@@ -7,9 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import httpx
+
 import pipeline
 from comfy_client import ComfyClient
-from config import FRONTEND_ORIGIN, OUTPUTS_DIR
+from config import FRONTEND_ORIGIN, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR
+from pipeline import tts
 from jobs import JobRunner, JobStore
 
 comfy = ComfyClient()
@@ -39,6 +42,10 @@ class JobRequest(BaseModel):
     clip_seconds: float = Field(default=3, ge=1, le=10)
     fade: float = Field(default=0.5, ge=0, le=2)
     style: str = ""
+    scene_mode: str = Field(default="lines", pattern="^(lines|llm)$")
+    narrate: bool = False
+    voice: str = Field(default="af_heart", pattern="^[a-z]{2}_[a-z]+$")
+    subtitles: str = Field(default="burn", pattern="^(off|soft|burn)$")
     image_steps: int = Field(default=4, ge=1, le=8)
     video_steps: int = Field(default=8, ge=4, le=30)
     seed: int | None = None
@@ -46,12 +53,25 @@ class JobRequest(BaseModel):
 
 @app.get("/api/health")
 async def health():
+    out = {"backend": "ok"}
     try:
         stats = await comfy.system_stats()
-        devices = [d.get("type") for d in stats.get("devices", [])]
-        return {"backend": "ok", "comfyui": "ok", "devices": devices}
+        out.update(comfyui="ok", devices=[d.get("type") for d in stats.get("devices", [])])
     except Exception as e:
-        return {"backend": "ok", "comfyui": "down", "error": str(e)}
+        out.update(comfyui="down", error=str(e))
+    try:
+        async with httpx.AsyncClient(timeout=2) as client:
+            tags = (await client.get(f"{OLLAMA_URL}/api/tags")).json()
+        out["ollama"] = "ok" if any(m["name"] == OLLAMA_MODEL for m in tags.get("models", [])) else "model missing"
+    except Exception:
+        out["ollama"] = "down"
+    out["llm_model"] = OLLAMA_MODEL
+    return out
+
+
+@app.get("/api/voices")
+async def list_voices():
+    return await asyncio.to_thread(tts.voices)
 
 
 @app.post("/api/jobs")

@@ -2,6 +2,11 @@ export type JobState = "queued" | "running" | "done" | "failed" | "cancelled";
 
 export interface JobResult {
   scenes: string[];
+  narration?: string[];
+  motion?: string[];
+  durations?: number[];
+  subtitles?: string | null;
+  subtitles_vtt?: string | null;
   seeds?: (number | null)[];
   images: string[];
   clips: string[];
@@ -27,6 +32,15 @@ export interface Health {
   comfyui: "ok" | "down";
   devices?: string[];
   error?: string;
+  ollama?: "ok" | "down" | "model missing";
+  llm_model?: string;
+}
+
+export interface Voice {
+  id: string;
+  name: string;
+  language: string;
+  gender: "female" | "male";
 }
 
 export interface JobSettings {
@@ -36,6 +50,10 @@ export interface JobSettings {
   motion: "none" | "kenburns" | "ltx";
   style: string;
   clip_seconds: number;
+  scene_mode: "lines" | "llm";
+  narrate: boolean;
+  voice: string;
+  subtitles: "off" | "soft" | "burn";
 }
 
 export const isActive = (job: Job) => job.state === "queued" || job.state === "running";
@@ -63,6 +81,7 @@ const post = (url: string, body?: unknown) =>
   });
 
 export const getHealth = () => fetch("/api/health").then((r) => json<Health>(r));
+export const listVoices = () => fetch("/api/voices").then((r) => json<Voice[]>(r));
 export const listJobs = () => fetch("/api/jobs").then((r) => json<Job[]>(r));
 export const createJob = (prompt: string, settings: JobSettings) =>
   post("/api/jobs", { prompt, ...settings }).then((r) => json<Job>(r));

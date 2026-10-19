@@ -1,4 +1,5 @@
-import { JobSettings } from "./api";
+import { useEffect, useState } from "react";
+import { Health, JobSettings, listVoices, Voice } from "./api";
 
 export const DEFAULTS: JobSettings = {
   width: 768,
@@ -7,33 +8,79 @@ export const DEFAULTS: JobSettings = {
   motion: "kenburns",
   style: "cinematic, highly detailed, soft lighting",
   clip_seconds: 3,
+  scene_mode: "lines",
+  narrate: false,
+  voice: "af_heart",
+  subtitles: "burn",
+};
+
+const PLACEHOLDERS = {
+  lines: "A lighthouse on a cliff at sunset\nWaves crashing against the rocks\nSeagulls flying over the sea",
+  llm: "An old fisherman rows out before dawn. He waits all morning but catches nothing. At noon a golden fish leaps beside his boat — he smiles and lets it go.",
 };
 
 interface Props {
   prompt: string;
   settings: JobSettings;
+  health: Health | null;
   onPrompt: (p: string) => void;
   onSettings: (s: JobSettings) => void;
   onSubmit: () => void;
   error: string | null;
 }
 
-export default function GenerateForm({ prompt, settings, onPrompt, onSettings, onSubmit, error }: Props) {
+export default function GenerateForm({ prompt, settings, health, onPrompt, onSettings, onSubmit, error }: Props) {
+  const [voices, setVoices] = useState<Voice[]>([]);
+  useEffect(() => {
+    listVoices().then(setVoices).catch(() => {});
+  }, []);
+
   const set = (patch: Partial<JobSettings>) => onSettings({ ...settings, ...patch });
+  const llm = settings.scene_mode === "llm";
+  const llmUnavailable = llm && health?.ollama !== undefined && health.ollama !== "ok";
+  const byLanguage = voices.reduce<Record<string, Voice[]>>((acc, v) => {
+    (acc[v.language] ??= []).push(v);
+    return acc;
+  }, {});
+
   return (
     <section className="card" id="generate">
-      <label htmlFor="prompt">Describe your video — one line per scene</label>
-      <textarea
-        id="prompt"
-        rows={5}
-        value={prompt}
-        onChange={(e) => onPrompt(e.target.value)}
-        placeholder={"A lighthouse on a cliff at sunset\nWaves crashing against the rocks\nSeagulls flying over the sea"}
-      />
+      <div className="segmented" role="radiogroup" aria-label="How to split into scenes">
+        <button
+          role="radio"
+          aria-checked={!llm}
+          className={!llm ? "on" : ""}
+          onClick={() => set({ scene_mode: "lines" })}
+        >
+          One line per scene
+        </button>
+        <button
+          role="radio"
+          aria-checked={llm}
+          className={llm ? "on" : ""}
+          onClick={() => set({ scene_mode: "llm", narrate: true })}
+        >
+          Story — AI writes the scenes
+        </button>
+      </div>
+
+      <label htmlFor="prompt">
+        {llm ? "Tell a story — the AI splits it into scenes and writes the narration" : "Describe your video — one line per scene"}
+      </label>
+      <textarea id="prompt" rows={5} value={prompt} onChange={(e) => onPrompt(e.target.value)} placeholder={PLACEHOLDERS[settings.scene_mode]} />
+      {llmUnavailable && (
+        <p className="error">
+          {health?.ollama === "down"
+            ? "Ollama isn't running — start the Ollama app to use story mode."
+            : `The model ${health?.llm_model} isn't installed — run: ollama pull ${health?.llm_model}`}
+        </p>
+      )}
+
       <label className="style">
         Style (added to every scene)
         <input value={settings.style} onChange={(e) => set({ style: e.target.value })} />
       </label>
+
       <div className="row">
         <label>
           Size
@@ -50,7 +97,7 @@ export default function GenerateForm({ prompt, settings, onPrompt, onSettings, o
           </select>
         </label>
         <label>
-          Scenes
+          {llm ? "Max scenes" : "Scenes"}
           <input
             type="number"
             min={1}
@@ -68,7 +115,7 @@ export default function GenerateForm({ prompt, settings, onPrompt, onSettings, o
           </select>
         </label>
         <label>
-          Seconds per scene
+          {settings.narrate ? "Min seconds per scene" : "Seconds per scene"}
           <select value={settings.clip_seconds} onChange={(e) => set({ clip_seconds: Number(e.target.value) })}>
             {[2, 3, 4, 5, 6].map((s) => (
               <option key={s} value={s}>
@@ -77,12 +124,50 @@ export default function GenerateForm({ prompt, settings, onPrompt, onSettings, o
             ))}
           </select>
         </label>
-        <button disabled={!prompt.trim()} onClick={onSubmit}>
+      </div>
+
+      <div className="row">
+        <label className="check">
+          <input type="checkbox" checked={settings.narrate} onChange={(e) => set({ narrate: e.target.checked })} />
+          Narration
+        </label>
+        <label>
+          Voice
+          <select value={settings.voice} disabled={!settings.narrate} onChange={(e) => set({ voice: e.target.value })}>
+            {voices.length === 0 && <option value={settings.voice}>{settings.voice}</option>}
+            {Object.entries(byLanguage).map(([language, vs]) => (
+              <optgroup key={language} label={language}>
+                {vs.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} ({v.gender})
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        <label>
+          Subtitles
+          <select
+            value={settings.subtitles}
+            disabled={!settings.narrate}
+            onChange={(e) => set({ subtitles: e.target.value as JobSettings["subtitles"] })}
+          >
+            <option value="burn">Burned in</option>
+            <option value="soft">Toggleable track</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+        <button disabled={!prompt.trim() || llmUnavailable} onClick={onSubmit}>
           Generate
         </button>
       </div>
+
       {settings.motion === "ltx" && (
-        <p className="muted">AI motion renders each scene with LTX-Video on your GPU — expect a few minutes per scene.</p>
+        <p className="muted">AI motion renders each scene with LTX-Video on your GPU — expect several minutes per scene.</p>
+      )}
+      {settings.narrate && settings.voice[0] !== "a" && settings.voice[0] !== "b" && (
+        <p className="muted">Write the narration in the voice's language — the voice reads whatever text it gets.</p>
       )}
       {error && <p className="error">{error}</p>}
     </section>

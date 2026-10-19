@@ -80,6 +80,7 @@ export default function App() {
       <GenerateForm
         prompt={prompt}
         settings={settings}
+        health={health}
         onPrompt={setPrompt}
         onSettings={setSettings}
         onSubmit={() => act(async () => select(await createJob(prompt, settings)))}
@@ -92,8 +93,10 @@ export default function App() {
           onCancel={() => act(async () => upsert(await cancelJob(selected.id)))}
           onRerun={(keepSeed) => act(async () => select(await rerunJob(selected.id, keepSeed)))}
           onEdit={() => {
-            // Current scene prompts, so edits made while regenerating single scenes carry over
-            setPrompt(selected.result?.scenes.join("\n") || selected.prompt);
+            // Story mode: the original story. Line mode: the current scene prompts, so edits made
+            // while regenerating single scenes carry over.
+            const story = selected.settings.scene_mode === "llm";
+            setPrompt((!story && selected.result?.scenes.join("\n")) || selected.prompt);
             const { seed: _seed, ...rest } = selected.settings; // edited re-runs get a fresh seed
             setSettings({ ...DEFAULTS, ...rest });
             document.getElementById("generate")?.scrollIntoView({ behavior: "smooth" });
@@ -122,5 +125,11 @@ export default function App() {
 function StatusPill({ health }: { health: Health | null }) {
   if (!health) return <span className="pill bad">Backend offline</span>;
   if (health.comfyui !== "ok") return <span className="pill warn">ComfyUI offline</span>;
-  return <span className="pill ok">Ready · {health.devices?.join(", ")}</span>;
+  const llm = health.ollama === "ok" ? "" : " · story mode off";
+  return (
+    <span className={`pill ${llm ? "warn" : "ok"}`} title={`Ollama: ${health.ollama} (${health.llm_model})`}>
+      Ready · {health.devices?.join(", ")}
+      {llm}
+    </span>
+  );
 }
