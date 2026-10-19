@@ -1,0 +1,56 @@
+{
+  "ckpt": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "sd_xl_turbo_1.0_fp16.safetensors" }
+  },
+  "photomaker": {
+    "class_type": "PhotoMakerLoader",
+    "inputs": { "photomaker_model_name": "photomaker-v1.bin" }
+  },
+  "face": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" }
+  },
+  "positive": {
+    "class_type": "PhotoMakerEncode",
+    "inputs": { "photomaker": ["photomaker", 0], "image": ["face", 0], "clip": ["ckpt", 1], "text": "" }
+  },
+  "negative": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["ckpt", 1] }
+  },
+  "latent": {
+    "class_type": "EmptyLatentImage",
+    "inputs": { "width": 768, "height": 512, "batch_size": 1 }
+  },
+  "sampler_select": {
+    "class_type": "KSamplerSelect",
+    "inputs": { "sampler_name": "euler_ancestral" }
+  },
+  "sigmas": {
+    "class_type": "SDTurboScheduler",
+    "inputs": { "model": ["ckpt", 0], "steps": 6, "denoise": 1.0 }
+  },
+  "sampler": {
+    "class_type": "SamplerCustom",
+    "inputs": {
+      "model": ["ckpt", 0],
+      "add_noise": true,
+      "noise_seed": 0,
+      "cfg": 1.0,
+      "positive": ["positive", 0],
+      "negative": ["negative", 0],
+      "sampler": ["sampler_select", 0],
+      "sigmas": ["sigmas", 0],
+      "latent_image": ["latent", 0]
+    }
+  },
+  "decode": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["sampler", 0], "vae": ["ckpt", 2] }
+  },
+  "save": {
+    "class_type": "SaveImage",
+    "inputs": { "images": ["decode", 0], "filename_prefix": "happica/character" }
+  }
+}

@@ -10,19 +10,31 @@ from pathlib import Path
 from typing import Callable
 
 from comfy_client import ComfyClient
-from config import WORKFLOWS_DIR
+from config import OUTPUTS_DIR, WORKFLOWS_DIR
 
 WORKFLOW = json.loads((WORKFLOWS_DIR / "sdxl_turbo_t2i.json").read_text())
 NEGATIVE = "blurry, low quality, distorted, text, watermark"
 PER_SCENE = ("positive", "sampler", "decode", "save")  # duplicated per scene; the other nodes are shared
 
 
-def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], settings: dict) -> dict:
+CHARACTER_STEPS = 6  # PhotoMaker needs a couple more turbo steps to settle the face
+
+
+def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], settings: dict,
+                    face: str | None = None, with_face: list[bool] | None = None) -> dict:
+    """One branch per prompt. Branches flagged in `with_face` are conditioned on the uploaded face with PhotoMaker
+    (their prompt must contain the trigger word "img" after the class word, e.g. "a woman img")."""
     base = copy.deepcopy(WORKFLOW)
     base["negative"]["inputs"]["text"] = NEGATIVE
     base["latent"]["inputs"].update(width=settings["width"], height=settings["height"])
     base["sigmas"]["inputs"]["steps"] = settings.get("image_steps", 4)
     wf = {nid: node for nid, node in base.items() if nid not in PER_SCENE}
+    with_face = with_face or [False] * len(prompts)
+    if face and any(with_face):
+        wf["photomaker"] = {"class_type": "PhotoMakerLoader", "inputs": {"photomaker_model_name": "photomaker-v1.bin"}}
+        wf["face"] = {"class_type": "LoadImage", "inputs": {"image": face}}
+        wf["sigmas_face"] = copy.deepcopy(base["sigmas"])
+        wf["sigmas_face"]["inputs"]["steps"] = CHARACTER_STEPS
 
     style = settings.get("style", "").strip()
     for i, (prompt, seed, name) in enumerate(zip(prompts, seeds, names)):
@@ -31,7 +43,13 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
             for key, value in node["inputs"].items():
                 if isinstance(value, list) and value[0] in PER_SCENE:
                     node["inputs"][key] = [f"{value[0]}_{i}", value[1]]
-        branch[f"positive_{i}"]["inputs"]["text"] = f"{prompt}, {style}" if style else prompt
+        text = f"{prompt}, {style}" if style else prompt
+        if face and with_face[i]:
+            branch[f"positive_{i}"] = {"class_type": "PhotoMakerEncode", "inputs": {
+                "photomaker": ["photomaker", 0], "image": ["face", 0], "clip": ["ckpt", 1], "text": text}}
+            branch[f"sampler_{i}"]["inputs"]["sigmas"] = ["sigmas_face", 0]
+        else:
+            branch[f"positive_{i}"]["inputs"]["text"] = text
         branch[f"sampler_{i}"]["inputs"]["noise_seed"] = seed
         branch[f"save_{i}"]["inputs"]["filename_prefix"] = f"happica/{name}"
         wf.update(branch)
@@ -45,11 +63,20 @@ async def generate_batch(
     out_paths: list[Path],
     seeds: list[int],
     on_progress: Callable[[float], None] = lambda _: None,
+    character: dict | None = None,
+    with_face: list[bool] | None = None,
 ) -> list[Path]:
-    """Generate one image per prompt in a single ComfyUI run; progress runs 0 → 1 across all of them."""
+    """Generate one image per prompt in a single ComfyUI run; progress runs 0 → 1 across all of them.
+
+    With a `character` ({"photo": path under outputs/, ...}), prompts flagged in `with_face` (all by default)
+    get that face via PhotoMaker; build those prompts with character.prompt_for()."""
     n = len(prompts)
     names = [f"{p.parent.parent.name}_{p.stem}" for p in out_paths]
-    wf = _batch_workflow(prompts, seeds, names, settings)
+    face = None
+    if character:
+        face = await comfy.upload_image(OUTPUTS_DIR / character["photo"], f"character_{Path(character['photo']).name}")
+        with_face = with_face if with_face is not None else [True] * n
+    wf = _batch_workflow(prompts, seeds, names, settings, face, with_face)
 
     done: dict[int, float] = {}
 
@@ -70,5 +97,5 @@ async def generate_batch(
 
 
 async def generate(comfy: ComfyClient, prompt: str, settings: dict, out_path: Path, seed: int,
-                   on_progress: Callable[[float], None] = lambda _: None) -> Path:
-    return (await generate_batch(comfy, [prompt], settings, [out_path], [seed], on_progress))[0]
+                   on_progress: Callable[[float], None] = lambda _: None, character: dict | None = None) -> Path:
+    return (await generate_batch(comfy, [prompt], settings, [out_path], [seed], on_progress, character))[0]

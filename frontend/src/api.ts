@@ -49,6 +49,7 @@ export interface ImageSettings {
   width: number;
   height: number;
   count: number;
+  character?: string; // a character job id
 }
 
 export interface VoiceSettings {
@@ -73,7 +74,7 @@ export interface MusicOptions {
 
 export interface Job {
   id: string;
-  kind: "video" | "music" | "sfx" | "image" | "voice";
+  kind: "video" | "music" | "sfx" | "image" | "voice" | "character";
   prompt: string;
   settings: Partial<JobSettings> & Record<string, unknown>;
   state: JobState;
@@ -111,6 +112,7 @@ export interface JobSettings {
   clip_seconds: number;
   scene_mode: "lines" | "llm" | "slides" | "musicvideo";
   song_track?: string;
+  character?: string; // a character job id
   slides?: { image: string; text: string }[];
   narrate: boolean;
   voice: string;
@@ -160,6 +162,8 @@ export async function uploadImage(file: File): Promise<{ path: string; width: nu
   return fetch("/api/uploads", { method: "POST", body: form }).then((r) => json(r));
 }
 export const createImages = (settings: ImageSettings) => post("/api/images", settings).then((r) => json<Job>(r));
+export const createCharacter = (c: { name: string; photo: string; kind: string; look: string; consent: boolean }) =>
+  post("/api/characters", c).then((r) => json<Job>(r));
 export const createVoiceover = (settings: VoiceSettings) => post("/api/voiceover", settings).then((r) => json<Job>(r));
 export const createSfx = (settings: SfxSettings) => post("/api/sfx", settings).then((r) => json<Job>(r));
 export const createMusic = (settings: MusicSettings) => post("/api/music", settings).then((r) => json<Job>(r));

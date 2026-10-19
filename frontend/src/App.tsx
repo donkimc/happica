@@ -24,8 +24,9 @@ import SfxStudio from "./SfxStudio";
 import { SlideItem } from "./SlidesEditor";
 import { libraryTracks } from "./MusicPicker";
 import VoiceStudio from "./VoiceStudio";
+import CharacterStudio from "./CharacterStudio";
 
-type Tab = "video" | "slides" | "musicvideo" | "image" | "music" | "sfx" | "voice";
+type Tab = "video" | "slides" | "musicvideo" | "image" | "music" | "sfx" | "voice" | "character";
 const TABS: { id: Tab; label: string }[] = [
   { id: "image", label: "Images" },
   { id: "video", label: "Story Video" },
@@ -34,6 +35,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "musicvideo", label: "Music Video" },
   { id: "sfx", label: "Sound FX" },
   { id: "voice", label: "Voiceover" },
+  { id: "character", label: "Characters" },
 ];
 const tabFromHash = (): Tab => TABS.find((t) => `#${t.id}` === location.hash && t.id !== "video")?.id ?? "video";
 
@@ -128,6 +130,8 @@ export default function App() {
   const musicJobs = jobs.filter((j) => j.kind === "music");
   const sfxJobs = jobs.filter((j) => j.kind === "sfx");
   const imageJobs = jobs.filter((j) => j.kind === "image");
+  const characterJobs = jobs.filter((j) => j.kind === "character");
+  const readyCharacters = characterJobs.filter((j) => j.state === "done");
   const selected = videoJobs.find((j) => j.id === selectedId);
   const switchTab = (t: Tab) => {
     setError(null);
@@ -156,7 +160,16 @@ export default function App() {
         </div>
       </header>
 
-      {tab === "voice" ? (
+      {tab === "character" ? (
+        <CharacterStudio
+          characters={characterJobs}
+          images={imageJobs}
+          upsert={upsert}
+          remove={(id) => setJobs((prev) => prev.filter((j) => j.id !== id))}
+          act={act}
+          error={error}
+        />
+      ) : tab === "voice" ? (
         <VoiceStudio
           jobs={jobs.filter((j) => j.kind === "voice")}
           upsert={upsert}
@@ -166,6 +179,7 @@ export default function App() {
         />
       ) : tab === "image" ? (
         <ImageStudio
+          characters={readyCharacters}
           jobs={imageJobs}
           health={health}
           upsert={upsert}
@@ -199,6 +213,7 @@ export default function App() {
         health={health}
         library={musicJobs}
         sfxLibrary={sfxJobs}
+        characters={readyCharacters}
         onPrompt={setPrompt}
         onSettings={setSettings}
         slidesMode={slidesTab}

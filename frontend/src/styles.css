@@ -173,3 +173,12 @@ label.volume input { width: 100%; padding: 0; }
 .danger-link { color: var(--bad) !important; }
 
 .song-preview { height: 36px; max-width: 100%; }
+
+/* Characters */
+.face-preview { width: 64px; height: 64px; object-fit: cover; border-radius: 50%; border: 2px solid var(--border); }
+.character-head { display: flex; gap: 12px; align-items: center; }
+.character-new { align-items: center; }
+label.consent { margin-top: 12px; font-size: 13px; }
+.change { margin-top: 12px; }
+.character-hint { max-width: 420px; align-self: center; }
+p.tight { margin-top: 0; }

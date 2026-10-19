@@ -36,6 +36,7 @@ interface Props {
   health: Health | null;
   library: Job[];
   sfxLibrary: Job[];
+  characters?: Job[];
   slidesMode?: boolean;
   slides?: SlideItem[];
   onSlides?: Dispatch<SetStateAction<SlideItem[]>>;
@@ -47,7 +48,7 @@ interface Props {
   error: string | null;
 }
 
-export default function GenerateForm({ prompt, settings, health, library, sfxLibrary, slidesMode = false, slides = [], onSlides, imageLibrary = [], musicVideo = false, onPrompt, onSettings, onSubmit, error }: Props) {
+export default function GenerateForm({ prompt, settings, health, library, sfxLibrary, characters = [], slidesMode = false, slides = [], onSlides, imageLibrary = [], musicVideo = false, onPrompt, onSettings, onSubmit, error }: Props) {
   const [voices, setVoices] = useState<Voice[]>([]);
   useEffect(() => {
     listVoices().then(setVoices).catch(() => {});
@@ -153,6 +154,29 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
         {musicVideo ? "Visual style" : "Style (added to every scene)"}
         <input value={settings.style} onChange={(e) => set({ style: e.target.value })} />
       </label>
+      )}
+
+      {!slidesMode && !musicVideo && characters.length > 0 && (
+        <div className="row">
+          <label>
+            Main character
+            <select value={settings.character ?? ""} onChange={(e) => set({ character: e.target.value })}>
+              <option value="">None</option>
+              {characters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.settings.name as string}
+                </option>
+              ))}
+            </select>
+          </label>
+          {settings.character && (
+            <span className="muted character-hint">
+              {llm
+                ? `The AI writes ${characters.find((c) => c.id === settings.character)?.settings.name as string} into the story; scenes with them get their face.`
+                : `Write ${characters.find((c) => c.id === settings.character)?.settings.name as string} in the lines where they appear (or nowhere, to have them in every scene).`}
+            </span>
+          )}
+        </div>
       )}
 
       <div className="row">

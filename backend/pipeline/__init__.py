@@ -13,7 +13,7 @@ from pathlib import Path
 from comfy_client import ComfyClient
 from config import OUTPUTS_DIR
 
-from . import assemble, captions, image, music, scenes, sfx, songwriter, tts, video
+from . import assemble, captions, character, image, music, scenes, sfx, songwriter, tts, video
 
 LEAD = 0.35  # narration starts this long after its scene appears
 TAIL = 0.4   # breathing room after the narration before the next scene's crossfade
@@ -101,7 +101,11 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
     elif settings.get("scene_mode") == "musicvideo":
         shots, song_seconds = await _music_video_scenes(settings)
     else:
-        shots = await scenes.split(job["prompt"], settings)
+        story = job["prompt"]
+        if (ch := character.load(settings.get("character", ""))) and settings.get("scene_mode") == "llm":
+            story += (f"\n\n(The main character is {ch['name']}, a {ch.get('kind', 'person')}: {ch.get('look', '')}. "
+                      f"Write the name {ch['name']} in every image prompt where they appear.)")
+        shots = await scenes.split(story, settings)
     result.update(scenes=[s["prompt"] for s in shots], narration=[s["narration"] for s in shots],
                   motion=[s["motion"] for s in shots])
     report("scenes", 1.0, result=result)
@@ -134,8 +138,18 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
         for sl, out in zip(settings["slides"], image_paths):
             await asyncio.to_thread(_fit_image, OUTPUTS_DIR / sl["image"], out, settings["width"], settings["height"])
     else:
-        await image.generate_batch(comfy, [s["prompt"] for s in shots], settings, image_paths, seeds,
-                                   on_progress=lambda p: report("image", p))
+        prompts = [s["prompt"] for s in shots]
+        ch = character.load(settings.get("character", ""))
+        with_face = None
+        if ch:
+            # Scenes that name the character get their face; if none do (line mode), they're in every scene
+            with_face = [character.mentions(p, ch) for p in prompts]
+            if not any(with_face):
+                with_face = [True] * len(prompts)
+            prompts = [character.prompt_for(p, ch) if f else p for p, f in zip(prompts, with_face)]
+            result["with_face"] = with_face
+        await image.generate_batch(comfy, prompts, settings, image_paths, seeds,
+                                   on_progress=lambda p: report("image", p), character=ch, with_face=with_face)
     result.update(images=[_rel(job_dir, p) for p in image_paths], seeds=seeds)
     report("image", 1.0, result=result)
 
@@ -176,8 +190,11 @@ async def regenerate_scene(job: dict, job_dir: Path, report, comfy: ComfyClient,
     result.update(scenes=prompts, seeds=seeds)
 
     p = _paths(job_dir, index)
-    await image.generate(comfy, prompts[index], settings, p["image"], seed=seeds[index],
-                         on_progress=lambda prog: report(f"scene {index + 1} image", prog))
+    ch = character.load(settings.get("character", ""))
+    face = bool(ch) and (result.get("with_face") or [True] * len(prompts))[index]
+    await image.generate(comfy, character.prompt_for(prompts[index], ch) if face else prompts[index], settings,
+                         p["image"], seed=seeds[index], on_progress=lambda prog: report(f"scene {index + 1} image", prog),
+                         character=ch if face else None)
 
     # Only rebuild video if this job made one (an "images only" job or one that failed before video stays as is)
     if result.get("video"):

@@ -14,7 +14,7 @@ import httpx
 import pipeline
 from comfy_client import ComfyClient
 from config import FRONTEND_ORIGIN, MUSIC_COMFY_URL, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR
-from pipeline import images, music, sfx, songwriter, tts, voiceover
+from pipeline import character, images, music, sfx, songwriter, tts, voiceover
 from jobs import JobRunner, JobStore
 
 comfy = ComfyClient()
@@ -26,6 +26,7 @@ runner = JobRunner(store, {
     "sfx": lambda job, job_dir, report: sfx.run(job, job_dir, report, music_comfy),  # audio models share the GPU-only instance
     "image": lambda job, job_dir, report: images.run(job, job_dir, report, comfy),
     "voice": lambda job, job_dir, report: voiceover.run(job, job_dir, report),  # Kokoro runs in-process on the CPU
+    "character": lambda job, job_dir, report: character.run(job, job_dir, report, comfy),
 })
 
 
@@ -59,6 +60,7 @@ class JobRequest(BaseModel):
     style: str = ""
     scene_mode: str = Field(default="lines", pattern="^(lines|llm|slides|musicvideo)$")
     song_track: str = ""  # musicvideo: a Music library take's .flac under outputs/
+    character: str = ""  # a character id: scenes that name them get their face
     slides: list[Slide] = Field(default_factory=list, max_length=30)
     narrate: bool = False
     voice: str = Field(default="af_heart", pattern="^[a-z]{2}_[a-z]+$")
@@ -117,6 +119,7 @@ async def list_voices():
 async def create_job(req: JobRequest):
     _check_library_track(req.music, req.music_track)
     _check_library_track(req.ambience, req.ambience_track, "sound from the Sound library")
+    _check_character(req.character)
     if req.scene_mode == "musicvideo":
         _check_library_track("library", req.song_track, "song for the music video")
         song = store.get(req.song_track.split("/")[0])
@@ -264,13 +267,38 @@ class ImageRequest(BaseModel):
     width: int = Field(default=768, ge=256, le=1024, multiple_of=64)
     height: int = Field(default=512, ge=256, le=1024, multiple_of=64)
     count: int = Field(default=4, ge=1, le=4)
+    character: str = ""  # a character id: their face via PhotoMaker
     image_steps: int = Field(default=4, ge=1, le=8)
     seed: int | None = None
 
 
 @app.post("/api/images")
 async def create_images(req: ImageRequest):
+    _check_character(req.character)
     return runner.submit(req.prompt.strip()[:80], req.model_dump(), "image")
+
+
+class CharacterRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[\w .'-]+$")
+    photo: str  # an upload under outputs/uploads/
+    kind: str = Field(default="person", pattern="^(woman|man|girl|boy|person)$")
+    look: str = Field(default="", max_length=300)  # hair, skin, eyes… what PhotoMaker alone tends to lose
+    consent: bool = False
+
+
+@app.post("/api/characters")
+async def create_character(req: CharacterRequest):
+    if not req.consent:
+        raise HTTPException(400, "Only use photos of yourself, or of people who agreed to it")
+    path = (OUTPUTS_DIR / req.photo).resolve()
+    if path.parent != UPLOADS.resolve() or not path.is_file():
+        raise HTTPException(400, "Upload a photo first")
+    return runner.submit(req.name, req.model_dump(), "character")
+
+
+def _check_character(character_id: str) -> None:
+    if character_id and not character.load(character_id):
+        raise HTTPException(400, "That character doesn't exist any more")
 
 
 class VoiceRequest(BaseModel):

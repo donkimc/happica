@@ -20,7 +20,7 @@ cd "$ROOT/engine/ComfyUI"
 "$UV" pip install --python .venv/bin/python -r requirements.txt
 
 # Models live outside the engine so ComfyUI can be reinstalled without re-downloading them
-mkdir -p "$ROOT"/models/{checkpoints,diffusion_models,text_encoders,vae,loras,upscale_models}
+mkdir -p "$ROOT"/models/{checkpoints,diffusion_models,text_encoders,vae,loras,upscale_models,photomaker,tts}
 cat > "$ROOT/models/extra_model_paths.yaml" <<EOF
 happica:
   base_path: $ROOT/models
@@ -31,6 +31,7 @@ happica:
   vae: vae
   loras: loras
   upscale_models: upscale_models
+  photomaker: photomaker
 EOF
 
 # Backend

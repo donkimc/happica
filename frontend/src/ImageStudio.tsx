@@ -12,6 +12,7 @@ const SIZES: [number, number, string][] = [
 ];
 
 interface Props {
+  characters: Job[];
   jobs: Job[];
   health: Health | null;
   upsert: (job: Job) => void;
@@ -20,7 +21,7 @@ interface Props {
   error: string | null;
 }
 
-export default function ImageStudio({ jobs, health, upsert, remove, act, error }: Props) {
+export default function ImageStudio({ characters, jobs, health, upsert, remove, act, error }: Props) {
   const [settings, setSettings] = useState<ImageSettings>(load);
   useEffect(() => {
     try {
@@ -71,6 +72,17 @@ export default function ImageStudio({ jobs, health, upsert, remove, act, error }
             </select>
           </label>
           <label>
+            Character
+            <select value={settings.character ?? ""} onChange={(e) => set({ character: e.target.value })}>
+              <option value="">None</option>
+              {characters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.settings.name as string}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             Images
             <select value={settings.count} onChange={(e) => set({ count: Number(e.target.value) })}>
               {[1, 2, 3, 4].map((n) => (
@@ -84,7 +96,11 @@ export default function ImageStudio({ jobs, health, upsert, remove, act, error }
             <button disabled={offline || settings.prompt.trim().length < 2} onClick={() => act(async () => upsert(await createImages(settings)))}>
               Create images
             </button>
-            {settings.prompt.trim() && <span className="muted">about {Math.round((25 + settings.count * (big ? 15 : 5)) / 5) * 5} s</span>}
+            {settings.prompt.trim() && (
+              <span className="muted">
+                about {Math.round((25 + settings.count * (settings.character ? 10 : big ? 15 : 5)) / 5) * 5} s
+              </span>
+            )}
           </div>
         </div>
         {error && <p className="error">{error}</p>}
