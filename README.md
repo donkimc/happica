@@ -51,7 +51,7 @@ Then open http://127.0.0.1:5173. Logs go to `outputs/logs/`.
 1. ✅ Environment + skeleton
 2. ✅ Text → image (SDXL-Turbo workflow)
 3. ✅ Ken Burns motion + crossfaded ffmpeg assembly → first end-to-end video
-4. Job queue polish: cancel, history gallery, re-run
+4. ✅ History gallery, re-run (new or same seed), edit & re-run, regenerate a single scene, delete
 5. AI motion with LTX-Video image-to-video
 6. Story mode: LLM scene splitting (Ollama), TTS narration, subtitles
 7. Presets and memory tuning for 16 GB

@@ -65,17 +65,58 @@ async def list_jobs():
 
 @app.get("/api/jobs/{job_id}")
 async def get_job(job_id: str):
+    return _get_or_404(job_id)
+
+
+def _get_or_404(job_id: str) -> dict:
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "job not found")
     return job
 
 
+def _require_idle(job: dict) -> None:
+    if job["state"] in ("queued", "running"):
+        raise HTTPException(409, "job is still queued or running")
+
+
+class RerunRequest(BaseModel):
+    keep_seed: bool = False
+
+
+@app.post("/api/jobs/{job_id}/rerun")
+async def rerun_job(job_id: str, req: RerunRequest = RerunRequest()):
+    """Start a new job with the same prompt and settings (a fresh seed unless keep_seed)."""
+    job = _get_or_404(job_id)
+    settings = dict(job["settings"])
+    settings["seed"] = (job["result"] or {}).get("seed", settings.get("seed")) if req.keep_seed else None
+    return runner.submit(job["prompt"], settings)
+
+
+class RegenerateRequest(BaseModel):
+    prompt: str | None = None
+
+
+@app.post("/api/jobs/{job_id}/scenes/{index}/regenerate")
+async def regenerate_scene(job_id: str, index: int, req: RegenerateRequest = RegenerateRequest()):
+    job = _get_or_404(job_id)
+    _require_idle(job)
+    if not job["result"] or not 0 <= index < len(job["result"].get("images", [])):
+        raise HTTPException(400, "scene has no image to regenerate")
+    task = lambda j, job_dir, report: pipeline.regenerate_scene(j, job_dir, report, comfy, index, req.prompt)
+    return runner.enqueue(job_id, task, stage=f"scene {index + 1}")
+
+
+@app.delete("/api/jobs/{job_id}")
+async def delete_job(job_id: str):
+    _require_idle(_get_or_404(job_id))
+    runner.delete(job_id)
+    return {"deleted": job_id}
+
+
 @app.post("/api/jobs/{job_id}/cancel")
 async def cancel_job(job_id: str):
-    job = store.get(job_id)
-    if not job:
-        raise HTTPException(404, "job not found")
+    job = _get_or_404(job_id)
     if job["state"] == "running":
         await comfy.interrupt()
     if job["state"] in ("queued", "running"):

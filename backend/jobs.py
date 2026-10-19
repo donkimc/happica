@@ -1,6 +1,7 @@
 """Job store (SQLite) and a single worker that runs one generation job at a time."""
 import asyncio
 import json
+import shutil
 import sqlite3
 import time
 import uuid
@@ -45,6 +46,10 @@ class JobStore:
         row = self.db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         return self._to_dict(row) if row else None
 
+    def delete(self, job_id: str) -> None:
+        self.db.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+        self.db.commit()
+
     def list(self, limit: int = 50) -> list[dict]:
         rows = self.db.execute("SELECT * FROM jobs ORDER BY created DESC LIMIT ?", (limit,)).fetchall()
         return [self._to_dict(r) for r in rows]
@@ -57,19 +62,37 @@ class JobStore:
         return d
 
 
-class JobRunner:
-    """Runs queued jobs sequentially; publishes every state change to subscribers."""
+Task = Callable  # async fn(job, job_dir, report) -> result dict
 
-    def __init__(self, store: JobStore, pipeline: Callable):
+
+class JobRunner:
+    """Runs queued tasks one at a time (the GPU only fits one); publishes every state change to subscribers.
+
+    A task is either a full generation (`submit`) or follow-up work on an existing job (`enqueue`),
+    such as regenerating one scene.
+    """
+
+    def __init__(self, store: JobStore, pipeline: Task):
         self.store = store
-        self.pipeline = pipeline  # async fn(job, job_dir, report) -> result dict
-        self.queue: asyncio.Queue[str] = asyncio.Queue()
+        self.pipeline = pipeline
+        self.queue: asyncio.Queue[tuple[str, Task]] = asyncio.Queue()
         self.subscribers: dict[str, set[asyncio.Queue]] = {}
 
     def submit(self, prompt: str, settings: dict) -> dict:
         job = self.store.create(prompt, settings)
-        self.queue.put_nowait(job["id"])
+        self.queue.put_nowait((job["id"], self.pipeline))
         return job
+
+    def enqueue(self, job_id: str, task: Task, stage: str = "") -> dict:
+        job = self._update(job_id, state="queued", stage=stage, progress=0.0, error=None)
+        self.queue.put_nowait((job_id, task))
+        return job
+
+    def delete(self, job_id: str) -> None:
+        self.store.delete(job_id)
+        job_dir = (OUTPUTS_DIR / job_id).resolve()
+        if job_dir.parent == OUTPUTS_DIR.resolve() and job_dir.is_dir():
+            shutil.rmtree(job_dir)
 
     def subscribe(self, job_id: str) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue()
@@ -90,9 +113,9 @@ class JobRunner:
 
     async def run_forever(self) -> None:
         while True:
-            job_id = await self.queue.get()
+            job_id, task = await self.queue.get()
             job = self.store.get(job_id)
-            if not job or job["state"] == "cancelled":
+            if not job or job["state"] == "cancelled":  # deleted or cancelled while waiting
                 continue
             job_dir = OUTPUTS_DIR / job_id
             job_dir.mkdir(parents=True, exist_ok=True)
@@ -102,9 +125,10 @@ class JobRunner:
 
             self._update(job_id, state="running")
             try:
-                result = await self.pipeline(job, job_dir, report)
+                result = await task(job, job_dir, report)
                 final = dict(state="done", progress=1.0, result=result)
             except Exception as e:  # surface every failure to the UI
                 final = dict(state="failed", error=str(e))
-            if self.store.get(job_id)["state"] != "cancelled":
+            current = self.store.get(job_id)
+            if current and current["state"] != "cancelled":
                 self._update(job_id, **final)

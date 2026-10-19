@@ -56,4 +56,32 @@ label.style { margin-top: 12px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
 .grid figure { margin: 0; }
 .grid img { width: 100%; border-radius: 8px; display: block; }
-.grid figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* Job detail */
+.detail { border-color: var(--accent); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.actions button.secondary { margin-top: 0; }
+button.secondary.danger { color: var(--bad); }
+button.link { background: none; color: var(--accent); padding: 0; font-weight: 500; font-size: 12px; flex-shrink: 0; }
+button.link:disabled { color: var(--muted); }
+.grid figcaption { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.scene-edit textarea { font-size: 13px; margin-top: 6px; }
+.row.tight { margin-top: 6px; gap: 6px; }
+.row.tight button { padding: 6px 12px; font-size: 13px; margin-top: 0; }
+
+/* History gallery */
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.tile {
+  display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 8px;
+  background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-weight: 400;
+}
+.tile.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.tile progress { width: 100%; }
+.thumb { position: relative; aspect-ratio: 3 / 2; border-radius: 6px; overflow: hidden; background: var(--bg); display: grid; place-items: center; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.badge {
+  position: absolute; top: 6px; right: 6px; font-size: 11px; padding: 2px 7px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6); color: white; text-transform: capitalize;
+}
+.badge.failed { background: var(--bad); } .badge.running, .badge.queued { background: var(--accent); }
+.tile-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
