@@ -1,0 +1,102 @@
+"""Happica backend: REST + WebSocket API in front of ComfyUI."""
+import asyncio
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+import pipeline
+from comfy_client import ComfyClient
+from config import FRONTEND_ORIGIN, OUTPUTS_DIR
+from jobs import JobRunner, JobStore
+
+comfy = ComfyClient()
+store = JobStore()
+runner = JobRunner(store, lambda job, job_dir, report: pipeline.run(job, job_dir, report, comfy))
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    worker = asyncio.create_task(runner.run_forever())
+    yield
+    worker.cancel()
+    await comfy.aclose()
+
+
+app = FastAPI(title="Happica", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=[FRONTEND_ORIGIN], allow_methods=["*"], allow_headers=["*"])
+app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
+
+
+class JobRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    width: int = 768
+    height: int = 512
+    max_scenes: int = Field(default=4, ge=1, le=12)
+    motion: str = Field(default="kenburns", pattern="^(none|kenburns|ltx)$")
+    clip_seconds: float = Field(default=3, ge=1, le=10)
+    fade: float = Field(default=0.5, ge=0, le=2)
+    style: str = ""
+    image_steps: int = Field(default=4, ge=1, le=8)
+    seed: int | None = None
+
+
+@app.get("/api/health")
+async def health():
+    try:
+        stats = await comfy.system_stats()
+        devices = [d.get("type") for d in stats.get("devices", [])]
+        return {"backend": "ok", "comfyui": "ok", "devices": devices}
+    except Exception as e:
+        return {"backend": "ok", "comfyui": "down", "error": str(e)}
+
+
+@app.post("/api/jobs")
+async def create_job(req: JobRequest):
+    return runner.submit(req.prompt, req.model_dump(exclude={"prompt"}))
+
+
+@app.get("/api/jobs")
+async def list_jobs():
+    return store.list()
+
+
+@app.get("/api/jobs/{job_id}")
+async def get_job(job_id: str):
+    job = store.get(job_id)
+    if not job:
+        raise HTTPException(404, "job not found")
+    return job
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    job = store.get(job_id)
+    if not job:
+        raise HTTPException(404, "job not found")
+    if job["state"] == "running":
+        await comfy.interrupt()
+    if job["state"] in ("queued", "running"):
+        job = store.update(job_id, state="cancelled")
+    return job
+
+
+@app.websocket("/ws/jobs/{job_id}")
+async def job_events(ws: WebSocket, job_id: str):
+    await ws.accept()
+    job = store.get(job_id)
+    if not job:
+        await ws.close(code=4404)
+        return
+    q = runner.subscribe(job_id)
+    try:
+        await ws.send_json(job)
+        while job["state"] in ("queued", "running"):
+            job = await q.get()
+            await ws.send_json(job)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        runner.unsubscribe(job_id, q)
