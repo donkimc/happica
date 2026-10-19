@@ -182,3 +182,11 @@ label.consent { margin-top: 12px; font-size: 13px; }
 .change { margin-top: 12px; }
 .character-hint { max-width: 420px; align-self: center; }
 p.tight { margin-top: 0; }
+
+/* Login */
+.login-page { min-height: 100vh; display: grid; place-items: center; padding: 16px; max-width: none; }
+.card.login { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; padding: 24px; }
+.card.login h1 { margin: 0; }
+.card.login .muted { margin: 0 0 6px; }
+.card.login input { width: 100%; }
+.card.login button { margin-top: 6px; }

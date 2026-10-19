@@ -5,7 +5,9 @@ import {
   createJob,
   deleteJob,
   getHealth,
+  getSession,
   Health,
+  logout,
   isActive,
   Job,
   JobSettings,
@@ -18,6 +20,7 @@ import {
 import GenerateForm, { DEFAULTS } from "./GenerateForm";
 import JobDetail from "./JobDetail";
 import JobGallery from "./JobGallery";
+import Login from "./Login";
 import MusicStudio from "./MusicStudio";
 import ImageStudio from "./ImageStudio";
 import SfxStudio from "./SfxStudio";
@@ -40,6 +43,7 @@ const TABS: { id: Tab; label: string }[] = [
 const tabFromHash = (): Tab => TABS.find((t) => `#${t.id}` === location.hash && t.id !== "video")?.id ?? "video";
 
 export default function App() {
+  const [authState, setAuthState] = useState<"checking" | "in" | "out">("checking");
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -75,7 +79,18 @@ export default function App() {
     return () => document.removeEventListener("play", onPlay, true);
   }, []);
 
+  // Login: check the session once, and drop back to the login screen whenever the backend says 401
   useEffect(() => {
+    getSession()
+      .then((s) => setAuthState(s.logged_in ? "in" : "out"))
+      .catch(() => setAuthState("out"));
+    const onUnauthorized = () => setAuthState("out");
+    addEventListener("happica:unauthorized", onUnauthorized);
+    return () => removeEventListener("happica:unauthorized", onUnauthorized);
+  }, []);
+
+  useEffect(() => {
+    if (authState !== "in") return;
     const poll = () => getHealth().then(setHealth).catch(() => setHealth(null));
     poll();
     const t = setInterval(poll, 5000);
@@ -86,7 +101,7 @@ export default function App() {
       })
       .catch(() => {});
     return () => clearInterval(t);
-  }, []);
+  }, [authState]);
 
   // Keep one WebSocket open per queued/running job, whatever started it (new job, re-run, regenerate, page reload).
   useEffect(() => {
@@ -139,6 +154,9 @@ export default function App() {
     history.replaceState(null, "", t === "video" ? location.pathname : `#${t}`);
   };
 
+  if (authState === "checking") return <main className="login-page" />;
+  if (authState === "out") return <Login onLoggedIn={() => setAuthState("in")} />;
+
   return (
     <main>
       <header>
@@ -157,6 +175,9 @@ export default function App() {
             How to use
           </a>
           <StatusPill health={health} />
+          <button className="link" onClick={() => logout().finally(() => setAuthState("out"))}>
+            Log out
+          </button>
         </div>
       </header>
 

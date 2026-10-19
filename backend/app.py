@@ -4,13 +4,15 @@ import io
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import httpx
 
+import auth
 import pipeline
 from comfy_client import ComfyClient
 from config import FRONTEND_ORIGIN, MUSIC_COMFY_URL, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR
@@ -39,9 +41,47 @@ async def lifespan(_: FastAPI):
     await music_comfy.aclose()
 
 
-app = FastAPI(title="Happica", lifespan=lifespan)
+app = FastAPI(title="Happica", lifespan=lifespan, docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=[FRONTEND_ORIGIN], allow_methods=["*"], allow_headers=["*"])
 app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    """Everything — API, generated files — needs a valid session, except logging in itself."""
+    if request.url.path not in auth.OPEN_PATHS and not auth.valid(request.cookies.get(auth.COOKIE)):
+        return JSONResponse({"detail": "Please log in"}, status_code=401)
+    return await call_next(request)
+
+
+class Login(BaseModel):
+    password: str = Field(max_length=200)
+
+
+@app.post("/api/login")
+async def login(req: Login, request: Request):
+    who = auth.client_id(request)
+    if not auth.allowed_attempt(who):
+        raise HTTPException(429, "Too many wrong passwords — try again in 15 minutes")
+    if not auth.check_password(who, req.password):
+        await asyncio.sleep(1)  # slows down guessing
+        raise HTTPException(401, "Wrong password")
+    response = JSONResponse({"ok": True})
+    response.set_cookie(auth.COOKIE, auth.new_session(), max_age=auth.SESSION_DAYS * 86400, httponly=True,
+                        samesite="lax", secure=auth.is_secure(request), path="/")
+    return response
+
+
+@app.get("/api/session")
+async def session(request: Request):
+    return {"logged_in": auth.valid(request.cookies.get(auth.COOKIE))}
+
+
+@app.post("/api/logout")
+async def logout():
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(auth.COOKIE, path="/")
+    return response
 
 
 class Slide(BaseModel):
@@ -400,6 +440,9 @@ async def cancel_job(job_id: str):
 
 @app.websocket("/ws/jobs/{job_id}")
 async def job_events(ws: WebSocket, job_id: str):
+    if not auth.valid(ws.cookies.get(auth.COOKIE)):  # HTTP middleware doesn't see WebSockets
+        await ws.close(code=4401)
+        return
     await ws.accept()
     job = store.get(job_id)
     if not job:

@@ -6,3 +6,5 @@ engine/
 models/
 outputs/
 .DS_Store
+.env
+*.tsbuildinfo

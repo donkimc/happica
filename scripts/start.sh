@@ -7,6 +7,15 @@ COMFY="$ROOT/engine/ComfyUI"
 MUSIC="$ROOT/engine/music-instance"
 mkdir -p "$ROOT/outputs/logs" "$MUSIC"/{output,input,temp,user}
 
+# Login password and session-signing secret live in .env (git-ignored). Change the password there anytime.
+if [ ! -f "$ROOT/.env" ]; then
+  password="$(openssl rand -base64 12 | tr -dc 'A-Za-z0-9' | head -c 12)"
+  printf 'HAPPICA_PASSWORD=%s\nHAPPICA_SECRET=%s\n' "$password" "$(openssl rand -hex 32)" > "$ROOT/.env"
+  chmod 600 "$ROOT/.env"
+  echo "Created .env — your login password is: $password (change HAPPICA_PASSWORD there)"
+fi
+set -a; source "$ROOT/.env"; set +a
+
 trap 'kill 0' EXIT INT TERM
 
 # PYTORCH_ENABLE_MPS_FALLBACK lets ops that MPS lacks run on the CPU instead of crashing.

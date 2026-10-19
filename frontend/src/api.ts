@@ -133,6 +133,10 @@ export const isActive = (job: Job) => job.state === "queued" || job.state === "r
 export const outputUrl = (job: Job, path: string) => `/outputs/${path}?v=${Math.floor(job.updated)}`;
 
 async function json<T>(res: Response): Promise<T> {
+  if (res.status === 401 && !res.url.endsWith("/api/login")) {
+    // Session missing or expired: the app shows the login screen
+    window.dispatchEvent(new Event("happica:unauthorized"));
+  }
   if (!res.ok) {
     const body = await res.text();
     let detail = body;
@@ -151,6 +155,9 @@ const post = (url: string, body?: unknown) =>
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
+export const getSession = () => fetch("/api/session").then((r) => json<{ logged_in: boolean }>(r));
+export const login = (password: string) => post("/api/login", { password }).then((r) => json<{ ok: boolean }>(r));
+export const logout = () => post("/api/logout").then((r) => json<{ ok: boolean }>(r));
 export const getHealth = () => fetch("/api/health").then((r) => json<Health>(r));
 export const listVoices = () => fetch("/api/voices").then((r) => json<Voice[]>(r));
 export const getMusicOptions = () => fetch("/api/music/options").then((r) => json<MusicOptions>(r));
