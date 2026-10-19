@@ -171,3 +171,5 @@ label.volume input { width: 100%; padding: 0; }
 .slide-body textarea { margin-top: 0; font-size: 13px; }
 .slide-actions { display: flex; gap: 12px; align-items: center; font-size: 13px; }
 .danger-link { color: var(--bad) !important; }
+
+.song-preview { height: 36px; max-width: 100%; }

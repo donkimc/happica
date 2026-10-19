@@ -44,9 +44,9 @@ async def split(text: str, settings: dict) -> list[dict]:
     return [{"prompt": line, "motion": "", "narration": line} for line in lines[:n]]
 
 
-async def storyboard(text: str, n: int) -> list[dict]:
+async def storyboard(text: str, n: int, model: str = OLLAMA_MODEL) -> list[dict]:
     body = {
-        "model": OLLAMA_MODEL,
+        "model": model,
         "messages": [{"role": "system", "content": SYSTEM.format(n=n)}, {"role": "user", "content": text}],
         "format": SCHEMA,
         "stream": False,

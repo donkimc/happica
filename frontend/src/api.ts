@@ -103,7 +103,8 @@ export interface JobSettings {
   motion: "none" | "kenburns" | "ltx";
   style: string;
   clip_seconds: number;
-  scene_mode: "lines" | "llm" | "slides";
+  scene_mode: "lines" | "llm" | "slides" | "musicvideo";
+  song_track?: string;
   slides?: { image: string; text: string }[];
   narrate: boolean;
   voice: string;

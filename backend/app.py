@@ -56,7 +56,8 @@ class JobRequest(BaseModel):
     clip_seconds: float = Field(default=3, ge=1, le=10)
     fade: float = Field(default=0.5, ge=0, le=2)
     style: str = ""
-    scene_mode: str = Field(default="lines", pattern="^(lines|llm|slides)$")
+    scene_mode: str = Field(default="lines", pattern="^(lines|llm|slides|musicvideo)$")
+    song_track: str = ""  # musicvideo: a Music library take's .flac under outputs/
     slides: list[Slide] = Field(default_factory=list, max_length=30)
     narrate: bool = False
     voice: str = Field(default="af_heart", pattern="^[a-z]{2}_[a-z]+$")
@@ -115,6 +116,14 @@ async def list_voices():
 async def create_job(req: JobRequest):
     _check_library_track(req.music, req.music_track)
     _check_library_track(req.ambience, req.ambience_track, "sound from the Sound library")
+    if req.scene_mode == "musicvideo":
+        _check_library_track("library", req.song_track, "song for the music video")
+        song = store.get(req.song_track.split("/")[0])
+        if not song or song["kind"] != "music":
+            raise HTTPException(400, "Pick a song from the Music library")
+        # The song is the soundtrack, at full level (nothing to duck under); no narration or subtitles
+        req.music, req.music_track, req.music_title = "library", req.song_track, song["settings"].get("title", "")
+        req.music_volume, req.narrate, req.subtitles = 0.4, False, "off"
     if req.scene_mode == "slides":
         if not req.slides:
             raise HTTPException(400, "Add at least one image")

@@ -22,13 +22,15 @@ import MusicStudio from "./MusicStudio";
 import ImageStudio from "./ImageStudio";
 import SfxStudio from "./SfxStudio";
 import { SlideItem } from "./SlidesEditor";
+import { libraryTracks } from "./MusicPicker";
 
-type Tab = "video" | "slides" | "image" | "music" | "sfx";
+type Tab = "video" | "slides" | "musicvideo" | "image" | "music" | "sfx";
 const TABS: { id: Tab; label: string }[] = [
   { id: "image", label: "Images" },
   { id: "video", label: "Story Video" },
   { id: "slides", label: "Slideshow" },
   { id: "music", label: "Music" },
+  { id: "musicvideo", label: "Music Video" },
   { id: "sfx", label: "Sound FX" },
 ];
 const tabFromHash = (): Tab => TABS.find((t) => `#${t.id}` === location.hash && t.id !== "video")?.id ?? "video";
@@ -116,9 +118,11 @@ export default function App() {
     setSelectedId(job.id);
   };
 
-  // Story Video and Slideshow share the video pipeline; each tab shows its own history
+  // Story Video, Slideshow and Music Video share the video pipeline; each tab shows its own history
   const slidesTab = tab === "slides";
-  const videoJobs = jobs.filter((j) => j.kind === "video" && (j.settings.scene_mode === "slides") === slidesTab);
+  const mvTab = tab === "musicvideo";
+  const modeOf = (j: Job) => (j.settings.scene_mode === "slides" ? "slides" : j.settings.scene_mode === "musicvideo" ? "musicvideo" : "video");
+  const videoJobs = jobs.filter((j) => j.kind === "video" && modeOf(j) === (slidesTab ? "slides" : mvTab ? "musicvideo" : "video"));
   const musicJobs = jobs.filter((j) => j.kind === "music");
   const sfxJobs = jobs.filter((j) => j.kind === "sfx");
   const imageJobs = jobs.filter((j) => j.kind === "image");
@@ -188,13 +192,22 @@ export default function App() {
         onPrompt={setPrompt}
         onSettings={setSettings}
         slidesMode={slidesTab}
+        musicVideo={mvTab}
         slides={slides}
         onSlides={setSlides}
         imageLibrary={imageJobs}
         onSubmit={() =>
           act(async () =>
             select(
-              slidesTab
+              mvTab
+                ? await (async () => {
+                    const track = settings.song_track && libraryTracks(musicJobs).some((t) => t.value === settings.song_track)
+                      ? settings.song_track
+                      : libraryTracks(musicJobs)[0]?.value ?? "";
+                    const title = libraryTracks(musicJobs).find((t) => t.value === track)?.title ?? "song";
+                    return createJob(`Music video: ${title}`, { ...settings, scene_mode: "musicvideo", song_track: track });
+                  })()
+                : slidesTab
                 ? await createJob(slides.find((sl) => sl.text.trim())?.text.slice(0, 80) || `Slideshow (${slides.length} images)`, {
                     ...settings,
                     scene_mode: "slides",
@@ -218,9 +231,18 @@ export default function App() {
             // while regenerating single scenes carry over.
             const story = selected.settings.scene_mode === "llm";
             if (selected.settings.scene_mode === "slides") setSlides(selected.settings.slides ?? []);
+            else if (selected.settings.scene_mode === "musicvideo") setPrompt(prompt);
             else setPrompt((!story && selected.result?.scenes.join("\n")) || selected.prompt);
             const { seed: _seed, ...rest } = selected.settings; // edited re-runs get a fresh seed
-            setSettings({ ...DEFAULTS, ...rest });
+            // Music videos store their forced soundtrack; keep the user's own Story Video sound choices instead
+            setSettings(
+              rest.scene_mode === "musicvideo"
+                ? (() => {
+                    const { song_track, style, width, height, motion, clip_seconds } = { ...DEFAULTS, ...rest };
+                    return { ...settings, song_track, style, width, height, motion, clip_seconds };
+                  })()
+                : { ...DEFAULTS, ...rest },
+            );
             document.getElementById("generate")?.scrollIntoView({ behavior: "smooth" });
           }}
           onDelete={() =>

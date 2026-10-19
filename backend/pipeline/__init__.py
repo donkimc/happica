@@ -29,6 +29,51 @@ def _rel(job_dir: Path, p: Path) -> str:
     return str(p.relative_to(job_dir.parent))
 
 
+async def _music_video_scenes(settings: dict) -> tuple[list[dict], float]:
+    """Storyboard a music video from the song's title, style tags and lyrics; one scene per ~clip_seconds."""
+    import soundfile as sf
+
+    song_dir = (OUTPUTS_DIR / settings["song_track"]).parent
+    from jobs import JobStore  # the song's settings hold its title, tags and lyrics
+
+    song = JobStore().get(song_dir.name)
+    seconds = (await asyncio.to_thread(sf.info, OUTPUTS_DIR / settings["song_track"])).duration
+    n = max(2, min(16, round(seconds / max(2.0, settings.get("clip_seconds", 6)))))
+    s = song["settings"] if song else {}
+    lines = [] if s.get("instrumental") else [l.strip() for l in s.get("lyrics", "").splitlines()
+                                              if l.strip() and not l.strip().startswith("[")]
+    head = f"A music video for the song \"{s.get('title') or 'Untitled'}\" (mood and look: {s.get('tags', '')}).\n"
+    rules = ("Illustrate what the words are ABOUT — their subject and imagery — not the band or instruments; show "
+             "musicians only if the lyrics are literally about them. Every scene must show something visibly different "
+             "(new place, action or camera angle). Keep one consistent visual world and recurring characters, described "
+             "the same way each time. The narration fields can stay short; they are not spoken.")
+    if lines:
+        # Tie each scene to its own slice of the lyrics, in order, so scenes follow the song and don't repeat
+        groups = [lines[round(k * len(lines) / n): round((k + 1) * len(lines) / n)] or [lines[min(k, len(lines) - 1)]]
+                  for k in range(n)]
+        plan = "\n".join(f"Scene {k + 1} illustrates: " + " / ".join(g) for k, g in enumerate(groups))
+        brief = f"{head}Write exactly {n} scenes, one per line below, in this order:\n{plan}\n{rules}"
+    else:
+        brief = f"{head}It is instrumental: tell a visual story in exactly {n} scenes that fits its mood.\n{rules}"
+
+    try:  # lyrics-to-pictures needs the bigger model; fall back if it isn't installed
+        shots = (await scenes.storyboard(brief, n, songwriter.SONGWRITER_MODEL))[:n]
+    except RuntimeError:
+        shots = (await scenes.storyboard(brief, n))[:n]
+    seen: dict[str, int] = {}
+    for shot in shots:
+        shot["narration"] = ""  # the song is the soundtrack
+        # Small models sometimes repeat a scene; vary the shot instead of showing it twice
+        k = seen.get(shot["prompt"], 0)
+        seen[shot["prompt"]] = k + 1
+        if k:
+            shot["prompt"] += ", " + SHOT_VARIANTS[(k - 1) % len(SHOT_VARIANTS)]
+    return shots, seconds
+
+
+SHOT_VARIANTS = ["extreme close-up", "wide establishing shot", "low angle shot", "overhead view", "silhouette against the light"]
+
+
 def _fit_image(src: Path, out: Path, width: int, height: int) -> None:
     """Scale and centre-crop a photo to fill the video frame (no letterboxing)."""
     from PIL import Image, ImageOps
@@ -50,8 +95,11 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
 
     report("scenes", 0.0)
     slides = settings.get("scene_mode") == "slides"
+    song_seconds = None
     if slides:  # the user's own images, each with optional narration
         shots = [{"prompt": sl["text"] or "a photograph", "narration": sl["text"], "motion": ""} for sl in settings["slides"]]
+    elif settings.get("scene_mode") == "musicvideo":
+        shots, song_seconds = await _music_video_scenes(settings)
     else:
         shots = await scenes.split(job["prompt"], settings)
     result.update(scenes=[s["prompt"] for s in shots], narration=[s["narration"] for s in shots],
@@ -69,6 +117,9 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
             result["audio"].append(_rel(job_dir, _paths(job_dir, i)["audio"]))
     result["speech"] = [round(s, 3) for s in speech]
     result["durations"] = [round(max(settings.get("clip_seconds", 3), s + LEAD + TAIL + fade if s else 0), 2) for s in speech]
+    if song_seconds:  # cut the visuals to the song: n scenes overlapping by `fade` add up to its exact length
+        n = len(shots)
+        result["durations"] = [round((song_seconds + (n - 1) * fade) / n, 3)] * n
 
     # One base seed per job keeps a similar look across scenes; every scene's seed is saved so it can be reproduced.
     seed = settings.get("seed")
