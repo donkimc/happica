@@ -136,3 +136,10 @@ label.grow input { width: 100%; }
 .wave rect.on { fill: var(--accent); }
 .download { font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; flex: none; }
 pre.lyrics { white-space: pre-wrap; font-size: 13px; background: var(--bg); border-radius: 8px; padding: 10px 12px; margin: 10px 0 0; }
+
+.draft-banner {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 12px; font-size: 13px;
+}
+button.secondary.inline { margin-top: 0; }

@@ -188,6 +188,14 @@ scripts/start.sh</code></pre>
 
   <h2 id="music">9. Music Studio</h2>
   <p>Open the <strong>Music</strong> tab at the top to make songs — with sung lyrics or instrumental — using ACE-Step 1.5, a local music model. Every song is made in <strong>two takes</strong> so you can pick the better one.</p>
+  <h3>Simple — describe it</h3>
+  <p>Describe the song in plain words, in any language: <em>“an upbeat indie pop song about riding a bicycle through the city on the first warm day of spring”</em>. Pick a length (and Instrumental if you want no vocals), then:</p>
+  <ul>
+    <li><strong>Write song</strong> — the local AI writes a title, style tags, lyrics sized to the length, and picks the BPM, key and language (about 15–25 s). It opens them in Custom mode so you can change anything before creating.</li>
+    <li><strong>Write &amp; create</strong> — same, but goes straight to making the two takes.</li>
+  </ul>
+  <p class="note">Songwriting uses <code>qwen2.5:7b</code> in Ollama (falls back to the story model if it isn't installed). The larger model keeps lyrics in your language and writes shorter, singable lines.</p>
+  <h3>Custom — write it yourself</h3>
   <ol class="steps">
     <li><strong>Style:</strong> describe the genre, mood, instruments and voice — e.g. <em>synthwave, energetic, warm synth pads, female vocals</em>. Click the <strong>+ chips</strong> to add common tags.</li>
     <li><strong>Lyrics:</strong> write them in sections. Click <strong>[verse]</strong>, <strong>[chorus]</strong>, <strong>[bridge]</strong>… to insert a section tag where your cursor is. Or switch on <strong>Instrumental</strong> to skip lyrics.</li>
@@ -210,7 +218,7 @@ scripts/start.sh</code></pre>
     <li>Songs are mastered to streaming loudness (−14 LUFS), trimmed of trailing silence and faded out at the end.</li>
     <li><strong>Re-run</strong> makes two new takes with the same settings; <strong>Edit &amp; re-run</strong> loads them into the form.</li>
   </ul>
-  <p class="note">Coming next: describe a song in plain words and let the AI write the lyrics, and background music for your videos.</p>
+  <p class="note">Coming next: background music for your videos.</p>
 
   <h2 id="trouble">10. Troubleshooting</h2>
   <div class="table-wrap">

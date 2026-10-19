@@ -117,6 +117,8 @@ const post = (url: string, body?: unknown) =>
 export const getHealth = () => fetch("/api/health").then((r) => json<Health>(r));
 export const listVoices = () => fetch("/api/voices").then((r) => json<Voice[]>(r));
 export const getMusicOptions = () => fetch("/api/music/options").then((r) => json<MusicOptions>(r));
+export const draftSong = (description: string, instrumental: boolean, duration: number) =>
+  post("/api/music/draft", { description, instrumental, duration }).then((r) => json<Partial<MusicSettings>>(r));
 export const createMusic = (settings: MusicSettings) => post("/api/music", settings).then((r) => json<Job>(r));
 export const listJobs = () => fetch("/api/jobs").then((r) => json<Job[]>(r));
 export const createJob = (prompt: string, settings: JobSettings) =>

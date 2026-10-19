@@ -3,6 +3,7 @@ import {
   cancelJob,
   createMusic,
   deleteJob,
+  draftSong,
   getMusicOptions,
   Health,
   isActive,
@@ -65,6 +66,10 @@ export default function MusicStudio({ jobs, health, upsert, remove, act, error }
   const [options, setOptions] = useState<MusicOptions | null>(null);
   const lyricsRef = useRef<HTMLTextAreaElement>(null);
   const caret = useRef<number | null>(null);
+  const [mode, setMode] = useState<"simple" | "custom">(() => (localStorage.getItem(MODE_KEY) === "custom" ? "custom" : "simple"));
+  const [description, setDescription] = useState("");
+  const [drafting, setDrafting] = useState(false);
+  const [draftedFrom, setDraftedFrom] = useState<string | null>(null);
 
   useEffect(() => {
     getMusicOptions().then(setOptions).catch(() => {});
@@ -76,6 +81,29 @@ export default function MusicStudio({ jobs, health, upsert, remove, act, error }
   }, [settings]);
 
   const set = (patch: Partial<MusicSettings>) => setSettings((s) => ({ ...s, ...patch }));
+  const switchMode = (m: "simple" | "custom") => {
+    setMode(m);
+    try {
+      localStorage.setItem(MODE_KEY, m);
+    } catch {}
+  };
+
+  /** Ask the local LLM for a draft; review it in Custom mode, or create the song straight away. */
+  function writeSong(createNow: boolean) {
+    act(async () => {
+      setDrafting(true);
+      try {
+        const draft = await draftSong(description, settings.instrumental, settings.duration);
+        const next = { ...settings, ...draft };
+        setSettings(next);
+        setDraftedFrom(description);
+        if (createNow) upsert(await createMusic(next));
+        else switchMode("custom");
+      } finally {
+        setDrafting(false);
+      }
+    });
+  }
   const offline = health?.music !== undefined && health.music !== "ok";
   const needsLyrics = !settings.instrumental && !settings.lyrics.trim();
 
@@ -105,12 +133,78 @@ export default function MusicStudio({ jobs, health, upsert, remove, act, error }
 
   function edit(job: Job) {
     setSettings({ ...MUSIC_DEFAULTS, ...(job.settings as Partial<MusicSettings>) });
+    setDraftedFrom(null);
+    switchMode("custom");
     document.getElementById("music-form")?.scrollIntoView({ behavior: "smooth" });
   }
 
   return (
     <>
       <section className="card" id="music-form">
+        <div className="segmented" role="radiogroup" aria-label="How to write the song">
+          <button role="radio" aria-checked={mode === "simple"} className={mode === "simple" ? "on" : ""} onClick={() => switchMode("simple")}>
+            Simple — describe it
+          </button>
+          <button role="radio" aria-checked={mode === "custom"} className={mode === "custom" ? "on" : ""} onClick={() => switchMode("custom")}>
+            Custom — write it yourself
+          </button>
+        </div>
+
+        {mode === "simple" && (
+          <>
+            <label htmlFor="song-idea">Describe the song — mood, genre, what it's about, any language</label>
+            <textarea
+              id="song-idea"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="A cozy rainy-day folk song about a lighthouse keeper waiting for the ships to come home"
+            />
+            <div className="row">
+              <label className="check">
+                <input type="checkbox" checked={settings.instrumental} onChange={(e) => set({ instrumental: e.target.checked })} />
+                Instrumental
+              </label>
+              <label>
+                Length
+                <select value={settings.duration} onChange={(e) => set({ duration: Number(e.target.value) })}>
+                  {DURATIONS.map((d) => (
+                    <option key={d} value={d}>
+                      {fmtTime(d)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="generate">
+                <button disabled={drafting || offline || description.trim().length < 3} onClick={() => writeSong(false)}>
+                  {drafting ? "Writing…" : "Write song"}
+                </button>
+                <button className="secondary inline" disabled={drafting || offline || description.trim().length < 3} onClick={() => writeSong(true)}>
+                  Write &amp; create
+                </button>
+              </div>
+            </div>
+            <p className="muted">
+              {drafting
+                ? "The AI is writing a title, style and lyrics — about 15–25 seconds."
+                : "Write song lets you review and edit the lyrics before anything is generated. Write & create goes straight to two takes."}
+            </p>
+            {health?.ollama === "down" && <p className="error">Ollama isn't running — start the Ollama app, or use Custom mode.</p>}
+          </>
+        )}
+
+        {mode === "custom" && (
+        <>
+        {draftedFrom && (
+          <div className="draft-banner">
+            <span>
+              ✍️ Drafted by AI from “{draftedFrom.length > 80 ? draftedFrom.slice(0, 80) + "…" : draftedFrom}” — edit anything, then Create song.
+            </span>
+            <button className="link" disabled={drafting} onClick={() => writeSong(false)}>
+              {drafting ? "Writing…" : "Write another"}
+            </button>
+          </div>
+        )}
         <div className="row tight-top">
           <label className="grow">
             Title (optional)
@@ -233,8 +327,10 @@ export default function MusicStudio({ jobs, health, upsert, remove, act, error }
             {settings.tags.trim() && <span className="muted">about {Math.round(estimateSeconds(settings) / 60)} min</span>}
           </div>
         </div>
+        </>
+        )}
         {offline && <p className="error">The music engine (ComfyUI on port 8189) isn't running — restart with scripts/start.sh.</p>}
-        {needsLyrics && settings.tags.trim() && <p className="muted">Add lyrics, or switch on Instrumental.</p>}
+        {mode === "custom" && needsLyrics && settings.tags.trim() && <p className="muted">Add lyrics, or switch on Instrumental.</p>}
         {error && <p className="error">{error}</p>}
       </section>
 
@@ -387,6 +483,7 @@ function TrackPlayer({ job, track, label }: { job: Job; track: Track; label: str
 }
 
 const SETTINGS_KEY = "happica.music";
+const MODE_KEY = "happica.music.mode";
 
 function loadSettings(): MusicSettings {
   try {

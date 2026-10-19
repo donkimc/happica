@@ -12,7 +12,7 @@ import httpx
 import pipeline
 from comfy_client import ComfyClient
 from config import FRONTEND_ORIGIN, MUSIC_COMFY_URL, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR
-from pipeline import music, tts
+from pipeline import music, songwriter, tts
 from jobs import JobRunner, JobStore
 
 comfy = ComfyClient()
@@ -114,6 +114,21 @@ async def create_music(req: MusicRequest):
         raise HTTPException(400, "Add lyrics, or switch on Instrumental")
     settings = req.model_dump()
     return runner.submit(req.title.strip() or req.tags.strip()[:60], settings, "music")
+
+
+class DraftRequest(BaseModel):
+    description: str = Field(min_length=3, max_length=1000)
+    instrumental: bool = False
+    duration: float = Field(default=60, ge=10, le=240)
+
+
+@app.post("/api/music/draft")
+async def draft_song(req: DraftRequest):
+    """Ask the local LLM for a title, style tags, lyrics and settings; nothing is generated yet."""
+    try:
+        return await songwriter.draft(req.description, req.instrumental, req.duration, await music_options())
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
 
 
 _music_options: dict | None = None

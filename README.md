@@ -60,6 +60,8 @@ Story mode needs [Ollama](https://ollama.com) running with a small model:
 ollama pull qwen2.5:3b
 ```
 
+The Music tab's songwriter uses `qwen2.5:7b` (`ollama pull qwen2.5:7b`; override with `SONGWRITER_MODEL`), falling back to `OLLAMA_MODEL`.
+
 Set `OLLAMA_MODEL=qwen2.5:7b` before `scripts/start.sh` for better storyboards (characters stay more consistent across scenes).
 
 Check each model's license before any commercial use.
@@ -120,6 +122,6 @@ Typical jobs: a 4-scene narrated story with pan & zoom takes about 1.5–2 minut
 
 1. ✅ M1 — ACE-Step 1.5 workflow, benchmarked and tuned for the M2
 2. ✅ M2 — Music Studio tab: style tags, lyrics editor, instrumental, 2 takes, library with waveform players
-3. M3 — Simple mode: describe a song, the local LLM writes title, tags and lyrics
+3. ✅ M3 — Simple mode: describe a song; qwen2.5:7b drafts title, tags, lyrics (sized to the length) and BPM/key/language for review, or creates directly
 4. M4 — Background music in videos: auto or from the library, ducked under narration
 5. M5 — Polish: guide, presets with music

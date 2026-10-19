@@ -23,6 +23,7 @@ async def concat(clips: list[Path], durations: list[float], out: Path, fade: flo
         listing = out.with_suffix(".txt")
         listing.write_text("".join(f"file '{Path(c).resolve()}'\n" for c in clips))
         await ffmpeg.run("-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(out))
+        listing.unlink()
         return out
 
     inputs = [arg for c in clips for arg in ("-i", str(c))]
