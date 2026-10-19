@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Happica Guide</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #ffffff; --text: #1c1c1a; --muted: #6b6b66; --border: #e2e2dc;
+    --accent: #4b5bdc; --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --code: #efefea;
+    color-scheme: light dark;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161615; --card: #20201e; --text: #ececea; --muted: #9a9a94; --border: #33332f;
+      --accent: #7d8bff; --code: #2a2a27;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161615; --card: #20201e; --text: #ececea; --muted: #9a9a94; --border: #33332f;
+    --accent: #7d8bff; --code: #2a2a27;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.55; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  h1 { font-size: 24px; margin: 0; }
+  h2 { font-size: 18px; margin: 36px 0 10px; scroll-margin-top: 16px; }
+  h3 { font-size: 15px; margin: 20px 0 6px; }
+  p, li { font-size: 15px; }
+  a { color: var(--accent); }
+  .back { font-size: 14px; text-decoration: none; border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; white-space: nowrap; }
+  .lead { color: var(--muted); margin-top: 4px; }
+  nav.toc { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin: 20px 0; }
+  nav.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 24px; }
+  nav.toc li { font-size: 14px; break-inside: avoid; }
+  @media (max-width: 560px) { nav.toc ol { columns: 1; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+  code { background: var(--code); border-radius: 5px; padding: 1px 5px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
+  pre { background: var(--code); border-radius: 8px; padding: 10px 12px; overflow-x: auto; font-size: 13px; }
+  pre code { background: none; padding: 0; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  .steps { counter-reset: step; list-style: none; padding: 0; }
+  .steps li { counter-increment: step; position: relative; padding-left: 36px; margin: 10px 0; }
+  .steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent); color: white; font-size: 13px; font-weight: 600; display: grid; place-items: center;
+  }
+  .pill { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .note { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; color: var(--muted); font-size: 14px; }
+  kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Happica guide</h1>
+    <a class="back" href="/">← Back to the app</a>
+  </header>
+  <p class="lead">Turn a few lines of text — or a whole story — into a narrated video, entirely on your Mac.</p>
+
+  <nav class="toc" aria-label="Contents">
+    <ol>
+      <li><a href="#start">Starting and stopping</a></li>
+      <li><a href="#first">Your first video</a></li>
+      <li><a href="#presets">Presets</a></li>
+      <li><a href="#modes">Scene modes</a></li>
+      <li><a href="#settings">All the settings</a></li>
+      <li><a href="#jobs">Working with results</a></li>
+      <li><a href="#tips">Tips for better videos</a></li>
+      <li><a href="#speed">How long things take</a></li>
+      <li><a href="#trouble">Troubleshooting</a></li>
+      <li><a href="#files">Where files are</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="start">1. Starting and stopping</h2>
+  <p>Happica runs three local services: <strong>ComfyUI</strong> (the image and video models), the <strong>backend</strong> (the job queue), and this <strong>web app</strong>. One script starts all three:</p>
+  <pre><code>cd ~/Project/happica
+scripts/start.sh</code></pre>
+  <p>Then open <a href="http://127.0.0.1:5173">http://127.0.0.1:5173</a>. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in that terminal to stop everything.</p>
+  <p>For story mode and narration, also open the <strong>Ollama</strong> app (it runs in the menu bar).</p>
+  <div class="card">
+    <strong>The status pill</strong> in the top-right corner tells you whether everything is ready:
+    <ul>
+      <li><span class="pill ok">Ready · mps</span> — everything is running, on your Mac's GPU.</li>
+      <li><span class="pill warn">Ready · mps · story mode off</span> — Ollama isn't running; line mode still works.</li>
+      <li><span class="pill warn">ComfyUI offline</span> — the model server is still starting (give it ~20 seconds) or has stopped.</li>
+      <li><span class="pill bad">Backend offline</span> — <code>scripts/start.sh</code> isn't running.</li>
+    </ul>
+  </div>
+
+  <h2 id="first">2. Your first video</h2>
+  <ol class="steps">
+    <li>Click the <strong>Narrated story</strong> preset at the top of the form.</li>
+    <li>Type a short story — three or four sentences is plenty. For example: <em>“A curious fox cub leaves its den on the first snowy morning. It chases snowflakes through a birch forest. At night it follows the northern lights home.”</em></li>
+    <li>Pick a <strong>voice</strong> if you like, and check the time estimate next to <strong>Generate</strong>.</li>
+    <li>Click <strong>Generate</strong>. The job appears below the form with a live progress bar showing each stage: scenes → narration → images → video → assemble.</li>
+    <li>When it says <strong>Done</strong>, the video plays right in the page. Right-click it (or use the player's menu) to download.</li>
+  </ol>
+  <p class="note">You can keep using the app while a job runs. Jobs run one at a time — the GPU only fits one — so new jobs wait in a queue.</p>
+
+  <h2 id="presets">3. Presets</h2>
+  <p>Presets set several options at once. The highlighted chip shows which preset your current settings match; change any option afterwards and the highlight goes away.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Preset</th><th>What it makes</th><th>Typical time</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Quick preview</strong></td><td>Square, short pan &amp; zoom scenes, no narration. One line per scene.</td><td>~30–45 s</td></tr>
+        <tr><td><strong>Narrated story</strong></td><td>Landscape, AI-written scenes, voiceover, burned-in subtitles.</td><td>~1.5–2 min</td></tr>
+        <tr><td><strong>Vertical short</strong></td><td>Portrait (512×768) for phones, 5 scenes, narrated with captions.</td><td>~1.5–2 min</td></tr>
+        <tr><td><strong>Cinematic (AI motion)</strong></td><td>Like Narrated story, but LTX-Video animates every scene.</td><td>~6–7 min per scene</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="modes">4. Scene modes</h2>
+  <h3>One line per scene</h3>
+  <p>Each line you type becomes one scene, and the line is used directly as the image description. Use this when you know exactly what each shot should show. If narration is on, the line is also what gets spoken.</p>
+  <h3>Story — AI writes the scenes</h3>
+  <p>Write in plain prose. A local language model (Ollama) splits it into scenes and writes three things for each: a detailed <em>image prompt</em>, a <em>motion</em> hint for AI motion, and a line of <em>narration</em>. You'll see the narration in quotes under each scene once the job runs.</p>
+
+  <h2 id="settings">5. All the settings</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Setting</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>Style</td><td>Added to every scene's image prompt, so all scenes share a look. Try <code>watercolor, soft pastel colors</code> or <code>35mm film photo, grainy</code>.</td></tr>
+        <tr><td>Size</td><td>768×512 landscape, 512×768 portrait, or 512×512 square.</td></tr>
+        <tr><td>Scenes / Max scenes</td><td>In line mode, the most lines used. In story mode, the most scenes the AI may write.</td></tr>
+        <tr><td>Motion</td><td><strong>Images only</strong> — just stills, no video. <strong>Pan &amp; zoom</strong> — a smooth camera move over each still (instant). <strong>AI motion</strong> — LTX-Video animates the scene: water ripples, flames flicker, the camera drifts (slow).</td></tr>
+        <tr><td>Seconds per scene</td><td>How long each scene lasts. With narration on this becomes a minimum: scenes stretch to fit their voiceover.</td></tr>
+        <tr><td>Narration</td><td>Speaks each scene's narration with Kokoro, a local voice model.</td></tr>
+        <tr><td>Voice</td><td>54 voices in 9 languages, grouped by language. The voice reads whatever text it gets, so write the story in the voice's language.</td></tr>
+        <tr><td>Subtitles</td><td><strong>Burned in</strong> — drawn onto the picture, always visible (best for social media). <strong>Toggleable track</strong> — a subtitle track viewers can switch on and off. <strong>Off</strong>. Both on-options also give you a downloadable <code>.srt</code> file.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Your last-used settings are remembered in this browser.</p>
+
+  <h2 id="jobs">6. Working with results</h2>
+  <p>Click any video in <strong>History</strong> to open it above the gallery. From there:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Action</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Regenerate</strong> (under a scene)</td><td>Redraws just that scene with a new random seed. You can edit its image prompt first — useful when a character looks different from the other scenes. The narration and timing stay the same, and the final video is rebuilt.</td></tr>
+        <tr><td><strong>Re-run</strong></td><td>Makes a new video from the same text and settings with new seeds — different images.</td></tr>
+        <tr><td><strong>Re-run, same seed</strong></td><td>Reproduces the same images exactly. Handy after changing nothing but, say, the voice.</td></tr>
+        <tr><td><strong>Edit &amp; re-run</strong></td><td>Loads the text and settings back into the form so you can tweak them and generate again.</td></tr>
+        <tr><td><strong>Delete</strong></td><td>Removes the job and all its files.</td></tr>
+        <tr><td><strong>Cancel</strong></td><td>Stops a queued or running job.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Click a scene's image to open it full size. The <strong>Subtitles (.srt)</strong> link under the scenes downloads the captions.</p>
+
+  <h2 id="tips">7. Tips for better videos</h2>
+  <ul>
+    <li><strong>Keep characters consistent.</strong> Each image is generated separately, so describe recurring characters the same way every time (“a red fox cub with a white chest and black paws”). If one scene drifts, use <em>Regenerate</em> with the corrected description.</li>
+    <li><strong>Be concrete.</strong> “A wooden rowboat on a misty lake at dawn, soft golden light” beats “a peaceful morning”.</li>
+    <li><strong>Short narration reads better.</strong> One or two sentences per scene, around 10–25 words.</li>
+    <li><strong>Preview first.</strong> Try an idea with <em>Quick preview</em> or <em>Narrated story</em>, then switch to <em>AI motion</em> once the images look right — use <em>Re-run, same seed</em> to keep them.</li>
+    <li><strong>Better storyboards:</strong> start with <code>OLLAMA_MODEL=qwen2.5:7b scripts/start.sh</code>. The larger model keeps characters more consistent than the default 3B one.</li>
+  </ul>
+
+  <h2 id="speed">8. How long things take</h2>
+  <p>Measured on an Apple M2 with 16 GB of memory:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Step</th><th>Time</th></tr></thead>
+      <tbody>
+        <tr><td>Story → scenes (AI)</td><td>~15 s</td></tr>
+        <tr><td>Narration</td><td>~5–10 s per scene</td></tr>
+        <tr><td>Images</td><td>~25 s to load the model, then ~5 s per image</td></tr>
+        <tr><td>Pan &amp; zoom</td><td>under 1 s per scene</td></tr>
+        <tr><td>AI motion (LTX-Video)</td><td>~6.5 min per 3-second scene</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">AI motion uses most of your Mac's memory. Close other heavy apps while it runs, and expect the fans to spin up.</p>
+
+  <h2 id="trouble">9. Troubleshooting</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Problem</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td>Generate is greyed out in story mode</td><td>Ollama isn't running, or the model isn't installed. Open the Ollama app; if the message says the model is missing, run <code>ollama pull qwen2.5:3b</code>.</td></tr>
+        <tr><td>A job failed</td><td>Its error appears in red on the job. Images made before the failure are kept. Re-run it, or check <code>outputs/logs/comfyui.log</code> and <code>outputs/logs/backend.log</code>.</td></tr>
+        <tr><td>“ComfyUI offline” stays on</td><td>Restart with <kbd>Ctrl</kbd>+<kbd>C</kbd> and <code>scripts/start.sh</code>. Look at the end of <code>outputs/logs/comfyui.log</code> for the reason.</td></tr>
+        <tr><td>AI motion is much slower than ~7 min a scene</td><td>The Mac is short on memory and swapping. Close other apps (browsers with many tabs, other AI tools) and try again.</td></tr>
+        <tr><td>Narration sounds wrong or garbled</td><td>The voice and the text are in different languages. Pick a voice that matches the story's language.</td></tr>
+        <tr><td>A character changes between scenes</td><td>See “Keep characters consistent” above — Regenerate the odd scene with a precise description.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="files">10. Where files are</h2>
+  <p>Everything is stored locally inside the project folder:</p>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><td><code>outputs/&lt;job&gt;/final.mp4</code></td><td>The finished video (with narration and subtitle track)</td></tr>
+        <tr><td><code>outputs/&lt;job&gt;/final.srt</code></td><td>Subtitles</td></tr>
+        <tr><td><code>outputs/&lt;job&gt;/images/</code></td><td>Each scene's still image (PNG)</td></tr>
+        <tr><td><code>outputs/&lt;job&gt;/clips/</code></td><td>Each scene's video clip</td></tr>
+        <tr><td><code>outputs/&lt;job&gt;/audio/</code></td><td>Each scene's narration (WAV)</td></tr>
+        <tr><td><code>outputs/logs/</code></td><td>Logs for troubleshooting</td></tr>
+        <tr><td><code>models/</code></td><td>The AI models (~18 GB)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top: 32px"><a class="back" href="/">← Back to the app</a></p>
+</main>
+</body>
+</html>

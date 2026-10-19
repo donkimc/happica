@@ -79,7 +79,12 @@ export default function App() {
     <main>
       <header>
         <h1>Happica</h1>
-        <StatusPill health={health} />
+        <div className="header-right">
+          <a className="guide-link" href="/guide.html" target="_blank" rel="noreferrer">
+            How to use
+          </a>
+          <StatusPill health={health} />
+        </div>
       </header>
 
       <GenerateForm

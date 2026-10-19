@@ -103,3 +103,6 @@ select:disabled { opacity: 0.5; }
 }
 .chip.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .generate { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.guide-link { font-size: 13px; color: var(--accent); text-decoration: none; }
+.guide-link:hover { text-decoration: underline; }
