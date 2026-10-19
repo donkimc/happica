@@ -23,8 +23,9 @@ import ImageStudio from "./ImageStudio";
 import SfxStudio from "./SfxStudio";
 import { SlideItem } from "./SlidesEditor";
 import { libraryTracks } from "./MusicPicker";
+import VoiceStudio from "./VoiceStudio";
 
-type Tab = "video" | "slides" | "musicvideo" | "image" | "music" | "sfx";
+type Tab = "video" | "slides" | "musicvideo" | "image" | "music" | "sfx" | "voice";
 const TABS: { id: Tab; label: string }[] = [
   { id: "image", label: "Images" },
   { id: "video", label: "Story Video" },
@@ -32,6 +33,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "music", label: "Music" },
   { id: "musicvideo", label: "Music Video" },
   { id: "sfx", label: "Sound FX" },
+  { id: "voice", label: "Voiceover" },
 ];
 const tabFromHash = (): Tab => TABS.find((t) => `#${t.id}` === location.hash && t.id !== "video")?.id ?? "video";
 
@@ -154,7 +156,15 @@ export default function App() {
         </div>
       </header>
 
-      {tab === "image" ? (
+      {tab === "voice" ? (
+        <VoiceStudio
+          jobs={jobs.filter((j) => j.kind === "voice")}
+          upsert={upsert}
+          remove={(id) => setJobs((prev) => prev.filter((j) => j.id !== id))}
+          act={act}
+          error={error}
+        />
+      ) : tab === "image" ? (
         <ImageStudio
           jobs={imageJobs}
           health={health}

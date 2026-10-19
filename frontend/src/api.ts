@@ -51,6 +51,12 @@ export interface ImageSettings {
   count: number;
 }
 
+export interface VoiceSettings {
+  text: string;
+  voice: string;
+  speed: number;
+}
+
 export interface SfxSettings {
   prompt: string;
   duration: number;
@@ -67,7 +73,7 @@ export interface MusicOptions {
 
 export interface Job {
   id: string;
-  kind: "video" | "music" | "sfx" | "image";
+  kind: "video" | "music" | "sfx" | "image" | "voice";
   prompt: string;
   settings: Partial<JobSettings> & Record<string, unknown>;
   state: JobState;
@@ -154,6 +160,7 @@ export async function uploadImage(file: File): Promise<{ path: string; width: nu
   return fetch("/api/uploads", { method: "POST", body: form }).then((r) => json(r));
 }
 export const createImages = (settings: ImageSettings) => post("/api/images", settings).then((r) => json<Job>(r));
+export const createVoiceover = (settings: VoiceSettings) => post("/api/voiceover", settings).then((r) => json<Job>(r));
 export const createSfx = (settings: SfxSettings) => post("/api/sfx", settings).then((r) => json<Job>(r));
 export const createMusic = (settings: MusicSettings) => post("/api/music", settings).then((r) => json<Job>(r));
 export const listJobs = () => fetch("/api/jobs").then((r) => json<Job[]>(r));

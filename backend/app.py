@@ -14,7 +14,7 @@ import httpx
 import pipeline
 from comfy_client import ComfyClient
 from config import FRONTEND_ORIGIN, MUSIC_COMFY_URL, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR
-from pipeline import images, music, sfx, songwriter, tts
+from pipeline import images, music, sfx, songwriter, tts, voiceover
 from jobs import JobRunner, JobStore
 
 comfy = ComfyClient()
@@ -25,6 +25,7 @@ runner = JobRunner(store, {
     "music": lambda job, job_dir, report: music.run(job, job_dir, report, music_comfy),
     "sfx": lambda job, job_dir, report: sfx.run(job, job_dir, report, music_comfy),  # audio models share the GPU-only instance
     "image": lambda job, job_dir, report: images.run(job, job_dir, report, comfy),
+    "voice": lambda job, job_dir, report: voiceover.run(job, job_dir, report),  # Kokoro runs in-process on the CPU
 })
 
 
@@ -270,6 +271,17 @@ class ImageRequest(BaseModel):
 @app.post("/api/images")
 async def create_images(req: ImageRequest):
     return runner.submit(req.prompt.strip()[:80], req.model_dump(), "image")
+
+
+class VoiceRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+    voice: str = Field(default="af_heart", pattern="^[a-z]{2}_[a-z]+$")
+    speed: float = Field(default=1.0, ge=0.6, le=1.5)
+
+
+@app.post("/api/voiceover")
+async def create_voiceover(req: VoiceRequest):
+    return runner.submit(" ".join(req.text.split())[:80], req.model_dump(), "voice")
 
 
 class SfxRequest(BaseModel):
