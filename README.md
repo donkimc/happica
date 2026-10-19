@@ -16,13 +16,27 @@ Requires macOS on Apple Silicon, git, ffmpeg, Node 18+, and [uv](https://docs.as
 scripts/setup.sh
 ```
 
-Then download the image model (6.9 GB) into `models/checkpoints/`:
+Then download the models (about 18 GB in total):
 
 ```bash
 curl -L -o models/checkpoints/sd_xl_turbo_1.0_fp16.safetensors https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors
 ```
 
-SDXL-Turbo is under Stability AI's community license; check its terms before any commercial use.
+```bash
+curl -L -o models/checkpoints/ltxv-2b-0.9.8-distilled.safetensors https://huggingface.co/Lightricks/LTX-Video/resolve/main/ltxv-2b-0.9.8-distilled.safetensors
+```
+
+```bash
+curl -L -o models/text_encoders/t5xxl_fp8_e4m3fn.safetensors https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors
+```
+
+| Model | Used for | Size |
+|---|---|---|
+| SDXL-Turbo | Text → image | 6.9 GB |
+| LTX-Video 2B 0.9.8 distilled | Image → video ("AI motion") | 6.3 GB |
+| T5-XXL fp8 | LTX-Video's text encoder (runs on CPU) | 4.9 GB |
+
+Check each model's license before any commercial use.
 
 ## Run
 
@@ -31,6 +45,19 @@ scripts/start.sh
 ```
 
 Then open http://127.0.0.1:5173. Logs go to `outputs/logs/`.
+
+## Speed on an M2 with 16 GB
+
+| Step | Time |
+|---|---|
+| Image (SDXL-Turbo, 768×512) | ~6 s (first one ~30 s while the model loads) |
+| Pan & zoom clip | < 1 s |
+| AI motion clip (LTX-Video, 3 s at 768×512) | ~6.5 min |
+
+ComfyUI starts with two flags that matter on a 16 GB Mac:
+
+- `--cache-none` releases each model once the workflow no longer needs it, so the 4.5 GB text encoder is gone before LTX-Video samples. Without it the machine swaps heavily.
+- `--fp32-vae` decodes video in fp32. The default bf16 is ~11× slower for 3D convolutions on Apple GPUs, and fp16 overflows into garbage frames.
 
 ## Layout
 
@@ -52,6 +79,6 @@ Then open http://127.0.0.1:5173. Logs go to `outputs/logs/`.
 2. ✅ Text → image (SDXL-Turbo workflow)
 3. ✅ Ken Burns motion + crossfaded ffmpeg assembly → first end-to-end video
 4. ✅ History gallery, re-run (new or same seed), edit & re-run, regenerate a single scene, delete
-5. AI motion with LTX-Video image-to-video
+5. ✅ AI motion with LTX-Video image-to-video
 6. Story mode: LLM scene splitting (Ollama), TTS narration, subtitles
 7. Presets and memory tuning for 16 GB

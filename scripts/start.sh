@@ -8,7 +8,7 @@ trap 'kill 0' EXIT INT TERM
 
 # PYTORCH_ENABLE_MPS_FALLBACK lets ops that MPS lacks run on the CPU instead of crashing
 (cd "$ROOT/engine/ComfyUI" && PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python main.py \
-  --listen 127.0.0.1 --port 8188 \
+  --listen 127.0.0.1 --port 8188 --cache-none --fp32-vae \
   --extra-model-paths-config "$ROOT/models/extra_model_paths.yaml" \
   > "$ROOT/outputs/logs/comfyui.log" 2>&1) &
 

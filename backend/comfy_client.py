@@ -1,6 +1,7 @@
 """Thin async client for the ComfyUI HTTP + WebSocket API."""
 import json
 import uuid
+from pathlib import Path
 from typing import Callable
 
 import httpx
@@ -37,6 +38,19 @@ class ComfyClient:
         r = await self.http.get("/view", params={"filename": filename, "subfolder": subfolder, "type": type_})
         r.raise_for_status()
         return r.content
+
+    async def upload_image(self, path: Path, name: str) -> str:
+        """Copy a local image into ComfyUI's input folder; returns the name LoadImage should use."""
+        files = {"image": (name, path.read_bytes(), "image/png")}
+        r = await self.http.post("/upload/image", files=files, data={"subfolder": "happica", "overwrite": "true"})
+        r.raise_for_status()
+        info = r.json()
+        return f"{info['subfolder']}/{info['name']}" if info.get("subfolder") else info["name"]
+
+    async def free(self) -> None:
+        """Unload all models so the next stage gets the whole 16 GB."""
+        r = await self.http.post("/free", json={"unload_models": True, "free_memory": True})
+        r.raise_for_status()
 
     async def interrupt(self) -> None:
         await self.http.post("/interrupt")

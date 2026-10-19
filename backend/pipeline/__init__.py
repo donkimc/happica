@@ -45,10 +45,14 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
     if settings.get("motion") == "none":
         return result
 
+    if settings.get("motion") == "ltx":
+        await comfy.free()  # SDXL out, LTX in: both don't fit in 16 GB at once
+
     for i, shot in enumerate(shots):
         report("video", i / len(shots))
         img_path, clip_path = _paths(job_dir, i)
-        await video.animate(comfy, img_path, shot, settings, clip_path, i)
+        on_progress = lambda p, i=i: report("video", (i + p) / len(shots))
+        await video.animate(comfy, img_path, shot, settings, clip_path, i, seed=seed + i, on_progress=on_progress)
         result["clips"].append(_rel(job_dir, clip_path))
         report("video", (i + 1) / len(shots), result=result)
 
@@ -74,8 +78,10 @@ async def regenerate_scene(job: dict, job_dir: Path, report, comfy: ComfyClient,
 
     # Only rebuild video if this job made one (an "images only" job or one that failed before video stays as is)
     if result.get("video"):
-        report(f"scene {index + 1} clip", 0.0)
-        await video.animate(comfy, img_path, shots[index], settings, clip_path, index)
+        if settings.get("motion") == "ltx":
+            await comfy.free()
+        await video.animate(comfy, img_path, shots[index], settings, clip_path, index, seed=seeds[index],
+                            on_progress=lambda p: report(f"scene {index + 1} clip", p))
         report("assemble", 0.0)
         await _assemble(job_dir, settings, len(shots))
     return result

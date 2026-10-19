@@ -40,6 +40,7 @@ class JobRequest(BaseModel):
     fade: float = Field(default=0.5, ge=0, le=2)
     style: str = ""
     image_steps: int = Field(default=4, ge=1, le=8)
+    video_steps: int = Field(default=8, ge=4, le=30)
     seed: int | None = None
 
 

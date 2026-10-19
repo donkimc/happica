@@ -1,0 +1,85 @@
+{
+  "ckpt": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "ltxv-2b-0.9.8-distilled.safetensors" }
+  },
+  "text_encoder": {
+    "class_type": "CLIPLoader",
+    "inputs": { "clip_name": "t5xxl_fp8_e4m3fn.safetensors", "type": "ltxv", "device": "cpu" }
+  },
+  "load_image": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" }
+  },
+  "preprocess": {
+    "class_type": "LTXVPreprocess",
+    "inputs": { "image": ["load_image", 0], "img_compression": 35 }
+  },
+  "positive": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["text_encoder", 0] }
+  },
+  "negative": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["text_encoder", 0] }
+  },
+  "i2v": {
+    "class_type": "LTXVImgToVideo",
+    "inputs": {
+      "positive": ["positive", 0],
+      "negative": ["negative", 0],
+      "vae": ["ckpt", 2],
+      "image": ["preprocess", 0],
+      "width": 768,
+      "height": 512,
+      "length": 73,
+      "batch_size": 1,
+      "strength": 1.0
+    }
+  },
+  "conditioning": {
+    "class_type": "LTXVConditioning",
+    "inputs": { "positive": ["i2v", 0], "negative": ["i2v", 1], "frame_rate": 24 }
+  },
+  "model_sampling": {
+    "class_type": "ModelSamplingLTXV",
+    "inputs": { "model": ["ckpt", 0], "max_shift": 2.05, "base_shift": 0.95, "latent": ["i2v", 2] }
+  },
+  "sigmas": {
+    "class_type": "LTXVScheduler",
+    "inputs": { "steps": 8, "max_shift": 2.05, "base_shift": 0.95, "stretch": true, "terminal": 0.1, "latent": ["i2v", 2] }
+  },
+  "sampler_select": {
+    "class_type": "KSamplerSelect",
+    "inputs": { "sampler_name": "euler_ancestral" }
+  },
+  "sampler": {
+    "class_type": "SamplerCustom",
+    "inputs": {
+      "model": ["model_sampling", 0],
+      "add_noise": true,
+      "noise_seed": 0,
+      "cfg": 1.0,
+      "positive": ["conditioning", 0],
+      "negative": ["conditioning", 1],
+      "sampler": ["sampler_select", 0],
+      "sigmas": ["sigmas", 0],
+      "latent_image": ["i2v", 2]
+    }
+  },
+  "decode": {
+    "class_type": "VAEDecodeTiled",
+    "inputs": {
+      "samples": ["sampler", 0],
+      "vae": ["ckpt", 2],
+      "tile_size": 512,
+      "overlap": 64,
+      "temporal_size": 32,
+      "temporal_overlap": 8
+    }
+  },
+  "save": {
+    "class_type": "SaveWEBM",
+    "inputs": { "images": ["decode", 0], "filename_prefix": "happica", "codec": "vp9", "fps": 24, "crf": 16 }
+  }
+}

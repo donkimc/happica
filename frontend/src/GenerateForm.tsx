@@ -81,6 +81,9 @@ export default function GenerateForm({ prompt, settings, onPrompt, onSettings, o
           Generate
         </button>
       </div>
+      {settings.motion === "ltx" && (
+        <p className="muted">AI motion renders each scene with LTX-Video on your GPU — expect a few minutes per scene.</p>
+      )}
       {error && <p className="error">{error}</p>}
     </section>
   );
