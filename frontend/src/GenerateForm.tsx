@@ -240,7 +240,7 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
               <optgroup key={language} label={language}>
                 {vs.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {v.name} ({v.gender})
+                    {/^(Female|Male) /.test(v.name) ? v.name : `${v.name} (${v.gender})`}
                   </option>
                 ))}
               </optgroup>

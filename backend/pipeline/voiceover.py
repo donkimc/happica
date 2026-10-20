@@ -1,4 +1,4 @@
-"""Voiceover: text → narration with Kokoro, sentence by sentence, with natural pauses and timed subtitles."""
+"""Voiceover: text → narration (Kokoro or Supertonic voices), sentence by sentence, with natural pauses and timed subtitles."""
 import asyncio
 import re
 from pathlib import Path

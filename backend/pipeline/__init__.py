@@ -313,7 +313,7 @@ async def _assemble(job_dir: Path, settings: dict, result: dict) -> dict:
     if result.get("ambience") and settings.get("ambience", "off") != "off":
         beds.append((OUTPUTS_DIR / result["ambience"]["track"], level(settings, "ambience_volume", 0.35, narrated)))
     final = await assemble.finalize(silent, job_dir / "final.mp4", total, narration_track, cues,
-                                    burn=settings.get("subtitles") == "burn",
+                                    burn=settings.get("subtitles") == "burn" and captions.can_burn(cues),
                                     size=(settings["width"], settings["height"]), beds=beds)
     silent.unlink()
     if not cues:

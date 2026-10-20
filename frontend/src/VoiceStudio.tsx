@@ -52,7 +52,7 @@ export default function VoiceStudio({ jobs, upsert, remove, act, error }: Props)
                 <optgroup key={language} label={language}>
                   {vs.map((v) => (
                     <option key={v.id} value={v.id}>
-                      {v.name} ({v.gender})
+                      {/^(Female|Male) /.test(v.name) ? v.name : `${v.name} (${v.gender})`}
                     </option>
                   ))}
                 </optgroup>

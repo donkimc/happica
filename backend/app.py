@@ -103,7 +103,7 @@ class JobRequest(BaseModel):
     character: str = ""  # a character id: scenes that name them get their face
     slides: list[Slide] = Field(default_factory=list, max_length=30)
     narrate: bool = False
-    voice: str = Field(default="af_heart", pattern="^[a-z]{2}_[a-z]+$")
+    voice: str = Field(default="af_heart", pattern=tts.VOICE_ID)
     subtitles: str = Field(default="burn", pattern="^(off|soft|burn)$")
     image_steps: int = Field(default=4, ge=1, le=8)
     video_steps: int = Field(default=8, ge=4, le=30)
@@ -343,7 +343,7 @@ def _check_character(character_id: str) -> None:
 
 class VoiceRequest(BaseModel):
     text: str = Field(min_length=1, max_length=5000)
-    voice: str = Field(default="af_heart", pattern="^[a-z]{2}_[a-z]+$")
+    voice: str = Field(default="af_heart", pattern=tts.VOICE_ID)
     speed: float = Field(default=1.0, ge=0.6, le=1.5)
 
 

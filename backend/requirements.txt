@@ -9,3 +9,4 @@ numpy>=1.26
 pillow>=10
 python-multipart>=0.0.9
 pillow-heif>=0.18
+supertonic>=1.3

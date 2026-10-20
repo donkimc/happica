@@ -64,6 +64,12 @@ Characters (PhotoMaker v1, 0.93 GB):
 curl -L -o models/photomaker/photomaker-v1.bin https://huggingface.co/TencentARC/PhotoMaker/resolve/main/photomaker-v1.bin
 ```
 
+Extra voices for Korean and 23 more languages (Supertonic 3, 385 MB):
+
+```bash
+backend/.venv/bin/python -c "from supertonic import TTS; TTS(model_dir='models/tts/supertonic-3')"
+```
+
 Narration voices (Kokoro TTS, 354 MB):
 
 ```bash

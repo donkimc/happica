@@ -4,12 +4,31 @@ This ffmpeg build has no libass/freetype (no `subtitles` or `drawtext` filter), 
 captions are drawn with Pillow as transparent PNGs and overlaid by ffmpeg.
 """
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 FONT = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+KOREAN_FONT = ("/System/Library/Fonts/AppleSDGothicNeo.ttc", 6)  # face 6 = Bold
+UNICODE_FONT = "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"  # Cyrillic, Greek, CJK…
+HANGUL = re.compile(r"[ᄀ-ᇿ㄰-㆏가-힯]")
+# Scripts whose letters join or reorder (Arabic, Hebrew, Indic): this Pillow has no shaping engine (raqm),
+# so they can't be drawn correctly into the picture; those videos get the player-rendered subtitle track.
+NEEDS_SHAPING = re.compile(r"[֐-ࣿऀ-෿יִ-﷿ﹰ-﻿]")
+
+
+def font_for(text: str, size: int) -> ImageFont.FreeTypeFont:
+    if HANGUL.search(text):
+        return ImageFont.truetype(KOREAN_FONT[0], size, index=KOREAN_FONT[1])
+    if any(ord(c) > 0x24F for c in text):
+        return ImageFont.truetype(UNICODE_FONT, size)
+    return ImageFont.truetype(FONT, size)
+
+
+def can_burn(cues: list["Cue"]) -> bool:
+    return not any(NEEDS_SHAPING.search(c.text) for c in cues)
 MAX_CHARS = 42  # per caption chunk at 768 px wide; narrower frames get proportionally shorter chunks
 
 
@@ -74,7 +93,7 @@ def render_png(text: str, width: int, height: int, out: Path) -> Path:
     draw = ImageDraw.Draw(img)
     size = max(16, round(min(width, height) * 0.055))  # shorter side, so portrait text isn't oversized
     while True:  # shrink until the line fits with a margin on both sides
-        font = ImageFont.truetype(FONT, size)
+        font = font_for(text, size)
         stroke = max(2, size // 12)
         x0, y0, x1, y1 = draw.textbbox((0, 0), text, font=font, stroke_width=stroke)
         if x1 - x0 <= width * 0.92 or size <= 12:

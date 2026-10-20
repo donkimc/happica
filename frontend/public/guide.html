@@ -107,7 +107,7 @@
         <tr><td><strong>Music</strong></td><td>Songs with lyrics or instrumentals, two takes each</td><td>Feeds Story Video, Slideshow, Music Video</td></tr>
         <tr><td><strong>Music Video</strong></td><td>Visuals for a song, cut to its exact length</td><td>Music</td></tr>
         <tr><td><strong>Sound FX</strong></td><td>Effects and seamless ambience loops</td><td>Feeds Story Video and Slideshow ambience</td></tr>
-        <tr><td><strong>Voiceover</strong></td><td>Narration MP3s with subtitles, 54 voices</td><td>—</td></tr>
+        <tr><td><strong>Voiceover</strong></td><td>Narration MP3s with subtitles, 294 voices in 33 languages</td><td>—</td></tr>
         <tr><td><strong>Characters</strong></td><td>A reusable person from one face photo</td><td>Images, Story Video</td></tr>
       </tbody>
     </table>
@@ -178,9 +178,9 @@ scripts/start.sh</code></pre>
         <tr><td>Motion</td><td><strong>Images only</strong> — just stills, no video. <strong>Pan &amp; zoom</strong> — a smooth camera move over each still (instant). <strong>AI motion</strong> — LTX-Video animates the scene: water ripples, flames flicker, the camera drifts (slow).</td></tr>
         <tr><td>Seconds per scene</td><td>How long each scene lasts. With narration on this becomes a minimum: scenes stretch to fit their voiceover.</td></tr>
         <tr><td>Narration</td><td>Speaks each scene's narration with Kokoro, a local voice model.</td></tr>
-        <tr><td>Voice</td><td>54 voices in 9 languages, grouped by language. The voice reads whatever text it gets, so write the story in the voice's language.</td></tr>
+        <tr><td>Voice</td><td>294 voices in 33 languages, grouped by language — including Korean, German, Russian, Vietnamese and more. In story mode the AI writes the narration in the voice's language; in line mode the voice reads your lines as written, so write them in its language.</td></tr>
         <tr><td>Background music</td><td><strong>Off</strong>. <strong>Auto</strong> — the AI reads your story, picks a fitting style and composes an instrumental exactly as long as the video (adds about 1–2 minutes). <strong>From Music library</strong> — any song you made in the Music tab; short songs loop, long ones are trimmed, and both fade in and out. The <strong>music level</strong> is relative to the voice: while the narrator speaks the music automatically dips (“ducking”), and comes back up between lines.</td></tr>
-        <tr><td>Subtitles</td><td><strong>Burned in</strong> — drawn onto the picture, always visible (best for social media). <strong>Toggleable track</strong> — a subtitle track viewers can switch on and off. <strong>Off</strong>. Both on-options also give you a downloadable <code>.srt</code> file.</td></tr>
+        <tr><td>Subtitles</td><td><strong>Burned in</strong> — drawn onto the picture, always visible (best for social media; Korean, Cyrillic and Greek work too — Arabic and Hindi automatically use the toggleable track, since their joined letters can't be drawn correctly). <strong>Toggleable track</strong> — a subtitle track viewers can switch on and off. <strong>Off</strong>. Both on-options also give you a downloadable <code>.srt</code> file.</td></tr>
       </tbody>
     </table>
   </div>
@@ -295,7 +295,7 @@ scripts/start.sh</code></pre>
   <p>In the Video tab, <strong>Ambience</strong> adds an environment bed under the whole video, alongside the music: <strong>Auto</strong> describes the setting from your story and makes a seamless loop (about 30 s extra), or pick any sound from your <strong>Sound library</strong>. Like the music, it dips while the narrator speaks. Finished videos can swap both with <strong>Change sound</strong>; <strong>New score</strong> / <strong>New ambience</strong> make a fresh Auto version.</p>
 
   <h2 id="voice">Voiceover</h2>
-  <p>Paste up to about 5,000 characters, pick one of 54 voices (grouped by language) and a speed. Blank lines between paragraphs become longer pauses. You get an MP3 to download and a matching <code>.srt</code> subtitle file. A minute of speech takes only a few seconds to make.</p>
+  <p>Paste up to about 5,000 characters, pick one of 294 voices in 33 languages (grouped by language; Korean has 5 female and 5 male voices) and a speed. Blank lines between paragraphs become longer pauses. You get an MP3 to download and a matching <code>.srt</code> subtitle file. A minute of speech takes only a few seconds to make.</p>
 
   <h2 id="characters">Characters</h2>
   <ol class="steps">
@@ -352,7 +352,7 @@ How the tool works:
   1) "One line per scene": every line I write becomes one scene. The line is BOTH the picture description AND, if Narration is on, the sentence that is read aloud. Best for short visual videos without narration.
   2) "Story — AI writes the scenes": I write plain prose; a small local AI (qwen2.5 3B) splits it into scenes and writes the picture prompt, a motion hint and one line of narration per scene. Best for narrated stories. Keep the story clear and concrete: who, where, what happens, in order. Short stories (4-8 sentences) work best.
 - Motion: "Images only"; "Pan &amp; zoom" (fast camera move over each still); "AI motion" (LTX-Video 2B animates each scene: subtle natural movement like water, fire, hair, a slow camera drift; about 6-7 minutes PER SCENE; not good at fast action or big movements).
-- Narration: Kokoro voice, 54 voices in 9 languages (English US/UK, Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin). The text must be in the voice's language. One or two sentences, max ~25 words per scene. Scenes stretch to fit their narration.
+- Narration: 294 voices in 33 languages (English (US/UK), Korean, Japanese, Mandarin, Spanish, French, German, Italian, Portuguese, Russian, Hindi, Arabic, Vietnamese, Indonesian, Turkish, Dutch, Polish, Swedish, Danish, Finnish, Greek, Czech, Hungarian, Romanian, Ukrainian, Bulgarian, Croatian, Slovak, Slovenian, Estonian, Latvian, Lithuanian). In story mode the AI writes the narration in the chosen voice's language; in line mode each line is read as written, so it must be in the voice's language. One or two sentences, max ~25 words per scene. Scenes stretch to fit their narration.
 - Other settings: Style (added to every picture prompt), Size (landscape 768x512, portrait 512x768, square 512x512), Scenes (max count), Seconds per scene (2-6), Subtitles (burned in / toggleable / off), Background music (off / auto-composed / from my Music library), Ambience (off / auto / from my Sound library), Main character (a saved person; write their name in the scenes where they appear).
 
 Your job: ask me nothing unless the idea is unclear; choose the best mode and settings and write the text.
@@ -382,7 +382,7 @@ My request:</pre>
 How the tool works:
 - I upload my own photos (or use generated ones) and put them in order. Each slide can have an optional narration text (max 400 characters), read aloud by a Kokoro voice and shown as subtitles. Slides without text stay silent for the "Seconds per scene" time (2-6 s).
 - Photos are cropped to fill the frame (768x512 landscape, 512x768 portrait or 512x512 square): important things should be near the center.
-- Narration works best as one or two short spoken sentences per slide (8-25 words), written for the ear: simple words, no lists, no abbreviations, no emoji, numbers written the way they are said. The text must be in the voice's language (English US/UK, Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin).
+- Narration works best as one or two short spoken sentences per slide (8-25 words), written for the ear: simple words, no lists, no abbreviations, no emoji, numbers written the way they are said. The text must be in the voice's language (33 languages, including English, Korean, Japanese, Mandarin, Spanish, French, German, Russian and Vietnamese).
 - Optional: background music (auto-composed or from my Music library) and ambience; the music automatically gets quieter while the narrator speaks.
 
 Your job: I'll describe my photos in order (or the event they show). Write narration that flows from slide to slide like a short story with a beginning and an end. Leave some slides silent if a pause works better.
@@ -480,7 +480,7 @@ My request:</pre>
 <pre class="prompt">You are helping me write a script for the Voiceover tool of Happica, a local AI studio.
 
 How the tool works:
-- Voice model: Kokoro (82M), 54 voices in 9 languages: English US, English UK, Spanish, French, Hindi, Italian, Japanese, Portuguese (Brazil), Mandarin. The voice reads exactly the text it gets, so the text must be in the voice's language.
+- Voice models: Kokoro and Supertonic 3, 294 voices in 33 languages: English (US/UK), Korean, Japanese, Mandarin, Spanish, French, German, Italian, Portuguese, Russian, Hindi, Arabic, Vietnamese, Indonesian, Turkish, Dutch, Polish, Swedish, Danish, Finnish, Greek, Czech, Hungarian, Romanian, Ukrainian, Bulgarian, Croatian, Slovak, Slovenian, Estonian, Latvian, Lithuanian. Korean and the other Supertonic languages have 10 voices each (Female 1-5, Male 1-5). The voice reads exactly the text it gets, so the text must be in the voice's language.
 - It reads punctuation as rhythm: commas = short pause, periods = longer pause, a blank line between paragraphs = a clear pause. Question marks raise the tone.
 - It cannot whisper, shout, laugh, change emotion on command or read stage directions — anything in brackets or asterisks is read aloud or ignored. Emotion comes only from the words and punctuation.
 - Avoid: abbreviations (write "for example", not "e.g."), symbols (&amp;, %, $ → words), emoji, URLs, markdown, all-caps, and long numbers (write them as spoken: "twenty twenty-six", "three point five million").
