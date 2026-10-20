@@ -13,7 +13,7 @@ from pathlib import Path
 from comfy_client import ComfyClient
 from config import OUTPUTS_DIR
 
-from . import assemble, captions, character, image, music, scenes, sfx, songwriter, tts, video
+from . import assemble, captions, character, image, music, scenes, sfx, songwriter, tts, video, vision
 
 LEAD = 0.35  # narration starts this long after its scene appears
 TAIL = 0.4   # breathing room after the narration before the next scene's crossfade
@@ -96,8 +96,23 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
     report("scenes", 0.0)
     slides = settings.get("scene_mode") == "slides"
     song_seconds = None
-    if slides:  # the user's own images, each with optional narration
+    if slides:  # the user's own pictures, each with optional narration
         shots = [{"prompt": sl["text"] or "a photograph", "narration": sl["text"], "motion": ""} for sl in settings["slides"]]
+        ai_narration = settings.get("narrate") and settings.get("slides_narration") == "ai"
+        if ai_narration or settings.get("motion") == "ltx":
+            # A vision model looks at each picture: its description guides AI motion and the narration
+            report("looking at your pictures", 0.0)
+            descriptions = await vision.describe([OUTPUTS_DIR / sl["image"] for sl in settings["slides"]],
+                                                 lambda p: report("looking at your pictures", p))
+            for shot, d in zip(shots, descriptions):
+                shot["prompt"] = d
+            result["descriptions"] = descriptions
+            if ai_narration:
+                report("writing the narration", 0.0)
+                lines = await vision.narrate(descriptions, tts.language_of(settings.get("voice", "af_heart")),
+                                             settings.get("theme", ""))
+                for shot, sl, line in zip(shots, settings["slides"], lines):
+                    shot["narration"] = sl["text"].strip() or line  # anything the user wrote wins
     elif settings.get("scene_mode") == "musicvideo":
         shots, song_seconds = await _music_video_scenes(settings)
     else:

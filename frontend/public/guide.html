@@ -84,7 +84,7 @@
       <li><a href="#tips">Tips for better videos</a></li>
       <li><a href="#speed">How long things take</a></li>
       <li><a href="#images">Images</a></li>
-      <li><a href="#slides">Slideshow</a></li>
+      <li><a href="#slides">Video from your pictures</a></li>
       <li><a href="#music">Music Studio</a></li>
       <li><a href="#musicvideo">Music Video</a></li>
       <li><a href="#sfx">Sound effects</a></li>
@@ -101,12 +101,11 @@
     <table>
       <thead><tr><th>Tab</th><th>What it makes</th><th>Works with</th></tr></thead>
       <tbody>
-        <tr><td><strong>Images</strong></td><td>1–4 pictures from a description, in any style</td><td>Characters; results feed Slideshow</td></tr>
-        <tr><td><strong>Story Video</strong></td><td>A narrated video from lines or a whole story</td><td>Music, Sound FX (ambience), Characters</td></tr>
-        <tr><td><strong>Slideshow</strong></td><td>A video from your own photos or library images</td><td>Images, Music, Sound FX</td></tr>
-        <tr><td><strong>Music</strong></td><td>Songs with lyrics or instrumentals, two takes each</td><td>Feeds Story Video, Slideshow, Music Video</td></tr>
+        <tr><td><strong>Images</strong></td><td>1–4 pictures from a description, in any style</td><td>Characters; results can be used in Story Video (My pictures)</td></tr>
+        <tr><td><strong>Story Video</strong></td><td>A narrated video from lines, a whole story, or your own pictures (“My pictures”)</td><td>Music, Sound FX (ambience), Characters</td></tr>
+                <tr><td><strong>Music</strong></td><td>Songs with lyrics or instrumentals, two takes each</td><td>Feeds Story Video, Music Video</td></tr>
         <tr><td><strong>Music Video</strong></td><td>Visuals for a song, cut to its exact length</td><td>Music</td></tr>
-        <tr><td><strong>Sound FX</strong></td><td>Effects and seamless ambience loops</td><td>Feeds Story Video and Slideshow ambience</td></tr>
+        <tr><td><strong>Sound FX</strong></td><td>Effects and seamless ambience loops</td><td>Feeds Story Video ambience</td></tr>
         <tr><td><strong>Voiceover</strong></td><td>Narration MP3s with subtitles, 294 voices in 33 languages</td><td>—</td></tr>
         <tr><td><strong>Characters</strong></td><td>A reusable person from one face photo</td><td>Images, Story Video</td></tr>
       </tbody>
@@ -230,16 +229,23 @@ scripts/start.sh</code></pre>
   <p class="note">AI motion uses most of your Mac's memory. Close other heavy apps while it runs, and expect the fans to spin up.</p>
 
   <h2 id="images">Images</h2>
-  <p>Describe a picture, pick a <strong>style</strong> chip (photo, watercolor, anime, oil painting…), a size and how many to make (1–4). Each one is a different variation. <strong>More like this</strong> makes another set; <strong>Download</strong> saves the PNG. Pick a <strong>Character</strong> to put that person in the picture. Everything you make here can be used in a Slideshow.</p>
+  <p>Describe a picture, pick a <strong>style</strong> chip (photo, watercolor, anime, oil painting…), a size and how many to make (1–4). Each one is a different variation. <strong>More like this</strong> makes another set; <strong>Download</strong> saves the PNG. Pick a <strong>Character</strong> to put that person in the picture. Everything you make here can be turned into a video with Story Video → My pictures.</p>
   <p class="note">About 25 s to load the model, then ~5 s per image (~10 s with a character, ~15 s at 1024×1024).</p>
 
-  <h2 id="slides">Slideshow</h2>
+  <h2 id="slides">Video from your pictures</h2>
+  <p>In <strong>Story Video</strong>, choose <strong>My pictures</strong> (next to “One line per scene” and “Story”) to make the video from your own photos or from pictures in your Image library instead of generating new ones.</p>
   <ol class="steps">
-    <li><strong>+ Add photos</strong> — choose several at once from your Mac or phone (JPEG, PNG, WebP and iPhone HEIC all work). Or <strong>+ From Image library</strong> to pick pictures you made.</li>
-    <li>Reorder with ↑ ↓, remove what you don't want, and optionally write a line of <strong>narration</strong> under each slide. Slides without text stay silent.</li>
-    <li>Set the size, motion (pan &amp; zoom or AI motion), voice, subtitles, music and ambience exactly as in Story Video, then <strong>Generate</strong>.</li>
+    <li><strong>+ Add photos</strong> — choose several at once from your Mac or phone (JPEG, PNG, WebP and iPhone HEIC all work). Or <strong>+ From Image library</strong> to pick pictures you made. Up to 30.</li>
+    <li>Reorder with ↑ ↓ and remove what you don't want.</li>
+    <li>Turn on <strong>Narration</strong> and choose who writes it:
+      <ul>
+        <li><strong>I'll write it under each picture</strong> — type a line under each one; pictures without text stay silent.</li>
+        <li><strong>AI writes it from the pictures</strong> — a local vision AI looks at every picture and writes one connected story in the voice's language (Korean voice → Korean narration). Add an optional line about what the video is about (“our family trip to Jeju last summer”) to steer it. Anything you type under a picture is used as written.</li>
+      </ul>
+    </li>
+    <li>Set the size, motion (pan &amp; zoom, or AI motion — which uses the AI's description of each picture to animate it), voice, subtitles, music and ambience, then <strong>Generate</strong>.</li>
   </ol>
-  <p class="note">Photos are cropped to fill the frame — keep the important part near the middle. Narrated slides last as long as their narration; the others use “Seconds per scene”.</p>
+  <p class="note">Photos are cropped to fill the frame — keep the important part near the middle. Narrated pictures last as long as their narration; the others use “Seconds per scene”. Reading the pictures adds about 8 seconds per picture.</p>
 
   <h2 id="music">Music Studio</h2>
   <p>Open the <strong>Music</strong> tab at the top to make songs — with sung lyrics or instrumental — using ACE-Step 1.5, a local music model. Every song is made in <strong>two takes</strong> so you can pick the better one.</p>
@@ -376,25 +382,26 @@ My request:</pre>
   </div>
 
   <div class="helper">
-    <div class="helper-head"><h3>Slideshow</h3><button class="copy" type="button">Copy</button></div>
-<pre class="prompt">You are helping me write narration for the Slideshow tool of Happica, a local AI studio that turns my photos into a narrated video.
+    <div class="helper-head"><h3>Video from my pictures</h3><button class="copy" type="button">Copy</button></div>
+<pre class="prompt">You are helping me write narration for the "My pictures" mode of Happica's Story Video tool, a local AI studio that turns my photos into a narrated video.
 
 How the tool works:
-- I upload my own photos (or use generated ones) and put them in order. Each slide can have an optional narration text (max 400 characters), read aloud by a Kokoro voice and shown as subtitles. Slides without text stay silent for the "Seconds per scene" time (2-6 s).
+- I upload my own photos (or use generated ones) and put them in order. Each picture can have an optional narration text (max 400 characters), read aloud and shown as subtitles. Pictures without text stay silent for the "Seconds per scene" time (2-6 s).
+- Happica can also write the narration itself from the pictures with a small local vision AI. Use this helper instead when I want more control: a specific story, names, places, dates or jokes the AI can't see in the pictures.
 - Photos are cropped to fill the frame (768x512 landscape, 512x768 portrait or 512x512 square): important things should be near the center.
-- Narration works best as one or two short spoken sentences per slide (8-25 words), written for the ear: simple words, no lists, no abbreviations, no emoji, numbers written the way they are said. The text must be in the voice's language (33 languages, including English, Korean, Japanese, Mandarin, Spanish, French, German, Russian and Vietnamese).
+- Narration works best as one or two short spoken sentences per picture (8-25 words), written for the ear: simple words, no lists, no abbreviations, no emoji, numbers written the way they are said. The text must be in the voice's language (33 languages, including English, Korean, Japanese, Mandarin, Spanish, French, German, Russian and Vietnamese).
 - Optional: background music (auto-composed or from my Music library) and ambience; the music automatically gets quieter while the narrator speaks.
 
-Your job: I'll describe my photos in order (or the event they show). Write narration that flows from slide to slide like a short story with a beginning and an end. Leave some slides silent if a pause works better.
+Your job: I'll describe my photos in order (or the event they show). Write narration that flows from picture to picture like a short story with a beginning and an end. Leave some pictures silent if a pause works better.
 
 Answer in exactly this format:
-Slide 1: (narration or "silent")
-Slide 2: ...
-(one line per slide)
+Picture 1: (narration or "silent")
+Picture 2: ...
+(one line per picture)
 Voice: (language and male/female)
 Size: ...
 Background music: off / auto / library (and what kind)
-Seconds per silent slide: ...
+Seconds per silent picture: ...
 
 My request:</pre>
   </div>

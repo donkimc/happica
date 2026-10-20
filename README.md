@@ -2,7 +2,7 @@
 
 A local AI media studio. ComfyUI does the generation, a FastAPI backend runs the pipeline and job queue, and a React web UI runs at `localhost:5173`.
 
-Tools: **Images** · **Story Video** · **Slideshow** · **Music** (songs with lyrics or instrumentals) · **Music Video** · **Sound FX** · **Voiceover** · **Characters** (a reusable face via PhotoMaker). The in-app guide is at `/guide.html`.
+Tools: **Images** · **Story Video** (from text, a story, or your own pictures, with AI narration written from the pictures) · **Music** (songs with lyrics or instrumentals) · **Music Video** · **Sound FX** · **Voiceover** · **Characters** (a reusable face via PhotoMaker). The in-app guide is at `/guide.html`.
 
 ```
 Web UI (React/Vite :5173) ──► Backend (FastAPI :8000) ──► ComfyUI (:8188)        images, video

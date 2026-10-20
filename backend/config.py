@@ -13,6 +13,7 @@ FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+VISION_MODEL = os.getenv("VISION_MODEL", "gemma3:4b")  # reads the user's own pictures (My pictures mode)
 TTS_DIR = Path(os.getenv("TTS_DIR", ROOT_DIR / "models" / "tts"))
 
 OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)

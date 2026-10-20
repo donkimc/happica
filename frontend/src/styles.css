@@ -190,3 +190,9 @@ p.tight { margin-top: 0; }
 .card.login .muted { margin: 0 0 6px; }
 .card.login input { width: 100%; }
 .card.login button { margin-top: 6px; }
+
+/* My pictures */
+.segmented { flex-wrap: wrap; }
+.segmented.small { margin-bottom: 0; }
+.segmented.small button { font-size: 12px; padding: 5px 10px; }
+.narration-source { align-items: center; gap: 8px; margin-top: 12px; }

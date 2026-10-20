@@ -37,7 +37,6 @@ interface Props {
   library: Job[];
   sfxLibrary: Job[];
   characters?: Job[];
-  slidesMode?: boolean;
   slides?: SlideItem[];
   onSlides?: Dispatch<SetStateAction<SlideItem[]>>;
   imageLibrary?: Job[];
@@ -48,14 +47,16 @@ interface Props {
   error: string | null;
 }
 
-export default function GenerateForm({ prompt, settings, health, library, sfxLibrary, characters = [], slidesMode = false, slides = [], onSlides, imageLibrary = [], musicVideo = false, onPrompt, onSettings, onSubmit, error }: Props) {
+export default function GenerateForm({ prompt, settings, health, library, sfxLibrary, characters = [], slides = [], onSlides, imageLibrary = [], musicVideo = false, onPrompt, onSettings, onSubmit, error }: Props) {
   const [voices, setVoices] = useState<Voice[]>([]);
   useEffect(() => {
     listVoices().then(setVoices).catch(() => {});
   }, []);
 
   const set = (patch: Partial<JobSettings>) => onSettings({ ...settings, ...patch });
-  const llm = !slidesMode && !musicVideo && settings.scene_mode === "llm";
+  const pictures = !musicVideo && settings.scene_mode === "slides";
+  const aiNarration = pictures && settings.narrate && settings.slides_narration === "ai";
+  const llm = !pictures && !musicVideo && settings.scene_mode === "llm";
   const songs = libraryTracks(library);
   const songTrack = settings.song_track && songs.some((t) => t.value === settings.song_track) ? settings.song_track : songs[0]?.value ?? "";
   const songSeconds = (() => {
@@ -70,12 +71,12 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
 
   const sceneCount = musicVideo
     ? Math.max(2, Math.min(16, Math.round(songSeconds / Math.max(2, settings.clip_seconds))))
-    : slidesMode
+    : pictures
     ? slides.length
     : llm
       ? settings.max_scenes
       : Math.min(settings.max_scenes, prompt.split("\n").filter((l) => l.trim()).length);
-  const ready = musicVideo ? !!songTrack : slidesMode ? slides.length > 0 : prompt.trim().length > 0;
+  const ready = musicVideo ? !!songTrack : pictures ? slides.length > 0 : prompt.trim().length > 0;
 
   return (
     <section className="card" id="generate">
@@ -96,7 +97,7 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
         </div>
       )}
 
-      {!slidesMode && !musicVideo && (
+      {!pictures && !musicVideo && (
       <div className="presets" aria-label="Presets">
         {PRESETS.map((p) => (
           <button
@@ -111,15 +112,12 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
       </div>
       )}
 
-      {slidesMode && onSlides && <SlidesEditor slides={slides} onChange={onSlides} imageLibrary={imageLibrary} />}
-
-      {!slidesMode && !musicVideo && (
-      <>
-      <div className="segmented" role="radiogroup" aria-label="How to split into scenes">
+      {!musicVideo && (
+      <div className="segmented" role="radiogroup" aria-label="Where the pictures come from">
         <button
           role="radio"
-          aria-checked={!llm}
-          className={!llm ? "on" : ""}
+          aria-checked={!llm && !pictures}
+          className={!llm && !pictures ? "on" : ""}
           onClick={() => set({ scene_mode: "lines" })}
         >
           One line per scene
@@ -132,8 +130,55 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
         >
           Story — AI writes the scenes
         </button>
+        <button
+          role="radio"
+          aria-checked={pictures}
+          className={pictures ? "on" : ""}
+          onClick={() => set({ scene_mode: "slides" })}
+        >
+          My pictures
+        </button>
       </div>
+      )}
 
+      {pictures && onSlides && (
+        <>
+          <SlidesEditor slides={slides} onChange={onSlides} imageLibrary={imageLibrary} />
+          {settings.narrate && (
+            <>
+              <div className="row tight-top narration-source">
+                <span className="muted">Narration:</span>
+                <div className="segmented small" role="radiogroup" aria-label="Who writes the narration">
+                  <button role="radio" aria-checked={!aiNarration} className={!aiNarration ? "on" : ""} onClick={() => set({ slides_narration: "mine" })}>
+                    I'll write it under each picture
+                  </button>
+                  <button role="radio" aria-checked={aiNarration} className={aiNarration ? "on" : ""} onClick={() => set({ slides_narration: "ai" })}>
+                    AI writes it from the pictures
+                  </button>
+                </div>
+              </div>
+              {aiNarration && (
+                <label className="style">
+                  What is the video about? (optional — helps the AI tell the story)
+                  <input
+                    value={settings.theme ?? ""}
+                    maxLength={500}
+                    placeholder="Our family trip to Jeju island last summer"
+                    onChange={(e) => set({ theme: e.target.value })}
+                  />
+                </label>
+              )}
+              {aiNarration && <p className="muted">The AI looks at each picture and writes a connected story in the voice's language. Anything you type under a picture is used as written.</p>}
+              {aiNarration && health?.vision !== undefined && health.vision !== "ok" && (
+                <p className="error">The picture-reading AI isn't installed — run: ollama pull gemma3:4b</p>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {!pictures && !musicVideo && (
+      <>
       <label htmlFor="prompt">
         {llm ? "Tell a story — the AI splits it into scenes and writes the narration" : "Describe your video — one line per scene"}
       </label>
@@ -149,14 +194,14 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
       </>
       )}
 
-      {!slidesMode && (
+      {!pictures && (
       <label className="style">
         {musicVideo ? "Visual style" : "Style (added to every scene)"}
         <input value={settings.style} onChange={(e) => set({ style: e.target.value })} />
       </label>
       )}
 
-      {!slidesMode && !musicVideo && characters.length > 0 && (
+      {!pictures && !musicVideo && characters.length > 0 && (
         <div className="row">
           <label>
             Main character
@@ -194,7 +239,7 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
             <option value="512x512">512×512 (square)</option>
           </select>
         </label>
-        {!slidesMode && !musicVideo && (
+        {!pictures && !musicVideo && (
         <label>
           {llm ? "Max scenes" : "Scenes"}
           <input
@@ -276,7 +321,7 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
               {formatDuration(
                 musicVideo
                   ? estimateSeconds({ ...settings, scene_mode: "llm", narrate: false, music: "off", ambience: "off" }, sceneCount) + 10
-                  : estimateSeconds(settings, sceneCount) - (slidesMode ? 25 + 5 * sceneCount : 0),
+                  : estimateSeconds(settings, sceneCount) - (pictures ? 25 + 5 * sceneCount : 0),
               )}
               {musicVideo ? ` · ${sceneCount} scenes` : ""}
             </span>

@@ -92,6 +92,7 @@ export interface Health {
   devices?: string[];
   error?: string;
   music?: "ok" | "down";
+  vision?: "ok" | "model missing";
   ollama?: "ok" | "down" | "model missing";
   llm_model?: string;
 }
@@ -114,6 +115,8 @@ export interface JobSettings {
   song_track?: string;
   character?: string; // a character job id
   slides?: { image: string; text: string }[];
+  slides_narration?: "mine" | "ai"; // My pictures: who writes the narration
+  theme?: string; // My pictures: what the video is about
   narrate: boolean;
   voice: string;
   subtitles: "off" | "soft" | "burn";

@@ -29,17 +29,17 @@ import { libraryTracks } from "./MusicPicker";
 import VoiceStudio from "./VoiceStudio";
 import CharacterStudio from "./CharacterStudio";
 
-type Tab = "video" | "slides" | "musicvideo" | "image" | "music" | "sfx" | "voice" | "character";
+type Tab = "video" | "musicvideo" | "image" | "music" | "sfx" | "voice" | "character";
 const TABS: { id: Tab; label: string }[] = [
   { id: "image", label: "Images" },
   { id: "video", label: "Story Video" },
-  { id: "slides", label: "Slideshow" },
   { id: "music", label: "Music" },
   { id: "musicvideo", label: "Music Video" },
   { id: "sfx", label: "Sound FX" },
   { id: "voice", label: "Voiceover" },
   { id: "character", label: "Characters" },
 ];
+// #slides (the old Slideshow tab) opens Story Video, where My pictures mode now lives
 const tabFromHash = (): Tab => TABS.find((t) => `#${t.id}` === location.hash && t.id !== "video")?.id ?? "video";
 
 export default function App() {
@@ -48,7 +48,9 @@ export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
-  const [settings, setSettings] = useState<JobSettings>(loadSettings);
+  const [settings, setSettings] = useState<JobSettings>(() =>
+    location.hash === "#slides" ? { ...loadSettings(), scene_mode: "slides" } : loadSettings(),
+  );
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>(tabFromHash);
   const [slides, setSlides] = useState<SlideItem[]>(() => {
@@ -138,10 +140,8 @@ export default function App() {
   };
 
   // Story Video, Slideshow and Music Video share the video pipeline; each tab shows its own history
-  const slidesTab = tab === "slides";
   const mvTab = tab === "musicvideo";
-  const modeOf = (j: Job) => (j.settings.scene_mode === "slides" ? "slides" : j.settings.scene_mode === "musicvideo" ? "musicvideo" : "video");
-  const videoJobs = jobs.filter((j) => j.kind === "video" && modeOf(j) === (slidesTab ? "slides" : mvTab ? "musicvideo" : "video"));
+  const videoJobs = jobs.filter((j) => j.kind === "video" && (j.settings.scene_mode === "musicvideo") === mvTab);
   const musicJobs = jobs.filter((j) => j.kind === "music");
   const sfxJobs = jobs.filter((j) => j.kind === "sfx");
   const imageJobs = jobs.filter((j) => j.kind === "image");
@@ -237,7 +237,6 @@ export default function App() {
         characters={readyCharacters}
         onPrompt={setPrompt}
         onSettings={setSettings}
-        slidesMode={slidesTab}
         musicVideo={mvTab}
         slides={slides}
         onSlides={setSlides}
@@ -253,13 +252,12 @@ export default function App() {
                     const title = libraryTracks(musicJobs).find((t) => t.value === track)?.title ?? "song";
                     return createJob(`Music video: ${title}`, { ...settings, scene_mode: "musicvideo", song_track: track });
                   })()
-                : slidesTab
-                ? await createJob(slides.find((sl) => sl.text.trim())?.text.slice(0, 80) || `Slideshow (${slides.length} images)`, {
-                    ...settings,
-                    scene_mode: "slides",
-                    slides,
-                  })
-                : await createJob(prompt, { ...settings, scene_mode: settings.scene_mode === "slides" ? "lines" : settings.scene_mode }),
+                : settings.scene_mode === "slides"
+                ? await createJob(
+                    settings.theme?.trim().slice(0, 80) || slides.find((sl) => sl.text.trim())?.text.slice(0, 80) || `My pictures (${slides.length})`,
+                    { ...settings, slides },
+                  )
+                : await createJob(prompt, settings),
             ),
           )
         }

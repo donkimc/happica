@@ -15,7 +15,7 @@ import httpx
 import auth
 import pipeline
 from comfy_client import ComfyClient
-from config import FRONTEND_ORIGIN, MUSIC_COMFY_URL, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR
+from config import FRONTEND_ORIGIN, MUSIC_COMFY_URL, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR, VISION_MODEL
 from pipeline import character, images, music, sfx, songwriter, tts, voiceover
 from jobs import JobRunner, JobStore
 
@@ -102,6 +102,8 @@ class JobRequest(BaseModel):
     song_track: str = ""  # musicvideo: a Music library take's .flac under outputs/
     character: str = ""  # a character id: scenes that name them get their face
     slides: list[Slide] = Field(default_factory=list, max_length=30)
+    slides_narration: str = Field(default="mine", pattern="^(mine|ai)$")  # "ai": a vision model writes it from the pictures
+    theme: str = Field(default="", max_length=500)  # what a My pictures video is about (guides AI narration)
     narrate: bool = False
     voice: str = Field(default="af_heart", pattern=tts.VOICE_ID)
     subtitles: str = Field(default="burn", pattern="^(off|soft|burn)$")
@@ -144,6 +146,7 @@ async def health():
         async with httpx.AsyncClient(timeout=2) as client:
             tags = (await client.get(f"{OLLAMA_URL}/api/tags")).json()
         out["ollama"] = "ok" if any(m["name"] == OLLAMA_MODEL for m in tags.get("models", [])) else "model missing"
+        out["vision"] = "ok" if any(m["name"] == VISION_MODEL for m in tags.get("models", [])) else "model missing"
     except Exception:
         out["ollama"] = "down"
     out["llm_model"] = OLLAMA_MODEL
