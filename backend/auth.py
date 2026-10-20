@@ -68,11 +68,16 @@ def allowed_attempt(who: str) -> bool:
     return _recent(who) < MAX_ATTEMPTS and _recent("*") < MAX_ATTEMPTS_ALL
 
 
+def note_failure(who: str) -> None:
+    """A wrong password or API key: counts toward the per-client and global limits."""
+    _failures[who].append(time.time())
+    _failures["*"].append(time.time())
+
+
 def check_password(who: str, password: str) -> bool:
     ok = hmac.compare_digest(password.encode(), PASSWORD.encode())
     if not ok:
-        _failures[who].append(time.time())
-        _failures["*"].append(time.time())
+        note_failure(who)
     return ok
 
 

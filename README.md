@@ -96,6 +96,20 @@ scripts/start.sh
 
 Then open http://127.0.0.1:5173. Logs go to `outputs/logs/`.
 
+## REST API (v1)
+
+Other apps automate Happica through `/api/v1` with an API key (create and revoke keys in the web app header → **API keys**; only a SHA-256 hash is stored). Send `Authorization: Bearer hap_…` or `X-API-Key: hap_…`. Interactive docs: `/api/v1/docs` (OpenAPI at `/api/v1/openapi.json`).
+
+| Call | Purpose |
+|---|---|
+| `POST /videos` · `/images` · `/music` · `/music/draft` · `/sfx` · `/voiceovers` · `/characters` | Start a job (202 + job); optional `webhook_url` |
+| `POST /uploads` | Upload a picture (multipart `file`) for slides or characters |
+| `GET /jobs/{id}` · `/jobs/{id}/wait?timeout=` · `/jobs?kind=&state=&limit=` | Status, block until finished, list |
+| `POST /jobs/{id}/cancel` · `/jobs/{id}/rerun` · `DELETE /jobs/{id}` | Manage jobs |
+| `GET /health` · `/voices` · `/music/options` | Info |
+
+Jobs return `files` with a `role` (video, audio, audio_lossless, image, scene_image, subtitles, music, ambience…) and a download `url` (send the same key). Webhooks POST `{"event": "job.done|job.failed|job.cancelled", "job": …}` with up to 3 tries. Key management endpoints (`/api/keys`) accept only a logged-in session, never an API key.
+
 ## Online access
 
 ```

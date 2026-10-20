@@ -91,6 +91,7 @@
       <li><a href="#voice">Voiceover</a></li>
       <li><a href="#characters">Characters</a></li>
       <li><a href="#helpers">Prompt helpers for AI chatbots</a></li>
+      <li><a href="#api">REST API for other apps</a></li>
       <li><a href="#trouble">Troubleshooting</a></li>
       <li><a href="#files">Where files are</a></li>
     </ol>
@@ -532,6 +533,60 @@ Example prompts:
 
 My request:</pre>
   </div>
+
+  <h2 id="api">REST API for other apps</h2>
+  <p>Other programs — on this Mac or anywhere through your public address — can make videos, images, music, sound effects and voiceovers with an <strong>API key</strong>. Everything a person can do in the tabs, the API can do.</p>
+  <ol class="steps">
+    <li>In the app header click <strong>API keys</strong>, give the key a name (e.g. “Batch video app”) and <strong>Create key</strong>. Copy it right away — it's shown only once. Revoke a key there anytime.</li>
+    <li>Send it with every request: <code>Authorization: Bearer hap_…</code> (or <code>X-API-Key: hap_…</code>).</li>
+    <li>Open the <strong>interactive API docs</strong> at <a href="/api/v1/docs">/api/v1/docs</a> (while logged in) to see every field and try calls in the browser.</li>
+  </ol>
+  <h3>Addresses</h3>
+  <ul>
+    <li>Apps on this Mac: <code>http://127.0.0.1:8000/api/v1/…</code> (fastest)</li>
+    <li>Anywhere else: <code>https://&lt;your Railway address&gt;/api/v1/…</code> (the Mac must be running <code>start.sh</code>)</li>
+  </ul>
+  <h3>Endpoints</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Call</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>POST /videos</code></td><td>A video. <code>scene_mode</code>: <code>lines</code> (one line per scene), <code>llm</code> (story — AI writes the scenes), <code>slides</code> (your pictures, upload first), <code>musicvideo</code> (with <code>song_track</code>). Same options as the Story Video form: narration, voice, subtitles, motion, music, ambience, character…</td></tr>
+        <tr><td><code>POST /images</code></td><td>1–4 images (prompt, style, size, character)</td></tr>
+        <tr><td><code>POST /music</code></td><td>A song or instrumental — and <code>POST /music/draft</code> to let the AI write the lyrics first</td></tr>
+        <tr><td><code>POST /sfx</code></td><td>A sound effect or seamless ambience loop</td></tr>
+        <tr><td><code>POST /voiceovers</code></td><td>Narration MP3 + subtitles from text</td></tr>
+        <tr><td><code>POST /characters</code></td><td>A reusable character from an uploaded face photo</td></tr>
+        <tr><td><code>POST /uploads</code></td><td>Upload a picture (multipart field <code>file</code>); returns its <code>path</code> for slides or characters</td></tr>
+        <tr><td><code>GET /jobs/{id}</code></td><td>Status, progress and <code>files</code> (each with a <code>role</code> — video, audio, image, subtitles… — and a download <code>url</code>)</td></tr>
+        <tr><td><code>GET /jobs/{id}/wait?timeout=600</code></td><td>Waits until the job is done (or the timeout passes) and returns it — the simplest way to run jobs one after another</td></tr>
+        <tr><td><code>GET /jobs?kind=video&amp;state=done</code></td><td>List jobs (newest first)</td></tr>
+        <tr><td><code>POST /jobs/{id}/cancel</code>, <code>/rerun</code>, <code>DELETE /jobs/{id}</code></td><td>Cancel, run again, delete</td></tr>
+        <tr><td><code>GET /voices</code>, <code>/music/options</code>, <code>/health</code></td><td>Voice ids, music keys/languages, engine status</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Every generation call answers right away with a job (<code>state: "queued"</code>). Jobs run one at a time on the Mac, in order. Add <code>"webhook_url": "http://…"</code> to any generation call to get a POST with the finished job (<code>event</code>: <code>job.done</code>, <code>job.failed</code> or <code>job.cancelled</code>). To download a file, request its <code>url</code> with the same key header.</p>
+  <h3>Example: make a narrated story video and download it</h3>
+<pre><code>KEY=hap_your_key_here
+JOB=$(curl -s -X POST http://127.0.0.1:8000/api/v1/videos \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"prompt":"A fox cub explores a snowy forest and finds its way home.",
+       "scene_mode":"llm","max_scenes":4,"narrate":true,"voice":"af_heart",
+       "subtitles":"burn","motion":"kenburns","music":"auto"}' | jq -r .id)
+URL=$(curl -s "http://127.0.0.1:8000/api/v1/jobs/$JOB/wait?timeout=1800" \
+  -H "Authorization: Bearer $KEY" | jq -r '.files[] | select(.role=="video") | .url')
+curl -s -H "Authorization: Bearer $KEY" -o fox.mp4 "$URL"</code></pre>
+  <h3>Example: Python</h3>
+<pre><code>import httpx
+
+api = httpx.Client(base_url="http://127.0.0.1:8000/api/v1",
+                   headers={"Authorization": "Bearer hap_your_key_here"}, timeout=1900)
+job = api.post("/images", json={"prompt": "a lighthouse at night", "count": 2}).json()
+job = api.get(f"/jobs/{job['id']}/wait", params={"timeout": 1800}).json()
+for f in job["files"]:
+    open(f["name"], "wb").write(api.get(f["url"]).content)</code></pre>
+  <p class="note">Treat keys like passwords: anyone with one can use your Mac's GPU and download what you've made. Use one key per app so you can revoke them separately. Wrong keys are rate-limited like wrong passwords.</p>
 
   <h2 id="trouble">Troubleshooting</h2>
   <div class="table-wrap">

@@ -158,6 +158,16 @@ const post = (url: string, body?: unknown) =>
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
+export interface ApiKey {
+  id: string;
+  name: string;
+  hint: string; // first and last characters, e.g. hap_AbC…xYz9
+  created: number;
+  last_used: number | null;
+}
+export const listApiKeys = () => fetch("/api/keys").then((r) => json<ApiKey[]>(r));
+export const createApiKey = (name: string) => post("/api/keys", { name }).then((r) => json<ApiKey & { key: string }>(r));
+export const revokeApiKey = (id: string) => fetch(`/api/keys/${id}`, { method: "DELETE" }).then((r) => json(r));
 export const getSession = () => fetch("/api/session").then((r) => json<{ logged_in: boolean }>(r));
 export const login = (password: string) => post("/api/login", { password }).then((r) => json<{ ok: boolean }>(r));
 export const logout = () => post("/api/logout").then((r) => json<{ ok: boolean }>(r));

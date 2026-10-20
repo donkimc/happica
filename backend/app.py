@@ -12,8 +12,10 @@ from pydantic import BaseModel, Field
 
 import httpx
 
+import apikeys
 import auth
 import pipeline
+from apikeys import KeyStore
 from comfy_client import ComfyClient
 from config import FRONTEND_ORIGIN, MUSIC_COMFY_URL, OLLAMA_MODEL, OLLAMA_URL, OUTPUTS_DIR, VISION_MODEL
 from pipeline import character, images, music, sfx, songwriter, tts, voiceover
@@ -41,17 +43,52 @@ async def lifespan(_: FastAPI):
     await music_comfy.aclose()
 
 
-app = FastAPI(title="Happica", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title="Happica", lifespan=lifespan, docs_url="/api/v1/docs", redoc_url=None,
+              openapi_url="/api/v1/openapi.json")
 app.add_middleware(CORSMiddleware, allow_origins=[FRONTEND_ORIGIN], allow_methods=["*"], allow_headers=["*"])
 app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
+keys = KeyStore()
 
 
 @app.middleware("http")
 async def require_login(request: Request, call_next):
-    """Everything — API, generated files — needs a valid session, except logging in itself."""
-    if request.url.path not in auth.OPEN_PATHS and not auth.valid(request.cookies.get(auth.COOKIE)):
-        return JSONResponse({"detail": "Please log in"}, status_code=401)
-    return await call_next(request)
+    """Everything — API, generated files, docs — needs a login session or an API key (other apps), except
+    logging in itself. Managing API keys needs a real login, so a leaked key can't make or keep keys."""
+    path = request.url.path
+    if path in auth.OPEN_PATHS or auth.valid(request.cookies.get(auth.COOKIE)):
+        return await call_next(request)
+    if not path.startswith("/api/keys") and (key := apikeys.from_headers(request.headers)):
+        who = auth.client_id(request)
+        if not auth.allowed_attempt(who):
+            return JSONResponse({"detail": "Too many invalid keys — try again in 15 minutes"}, status_code=429)
+        if record := keys.verify(key):
+            request.state.api_key = record
+            return await call_next(request)
+        auth.note_failure(who)
+        return JSONResponse({"detail": "Invalid or revoked API key"}, status_code=401)
+    return JSONResponse({"detail": "Please log in, or send an API key (Authorization: Bearer hap_…)"}, status_code=401)
+
+
+class NewKey(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+@app.get("/api/keys")
+async def list_keys():
+    return keys.list()
+
+
+@app.post("/api/keys")
+async def create_key(req: NewKey):
+    record, key = keys.create(req.name.strip())
+    return {**record, "key": key}  # the only time the full key is shown
+
+
+@app.delete("/api/keys/{key_id}")
+async def revoke_key(key_id: str):
+    if not keys.revoke(key_id):
+        raise HTTPException(404, "key not found")
+    return {"revoked": key_id}
 
 
 class Login(BaseModel):
@@ -437,13 +474,15 @@ async def cancel_job(job_id: str):
     if job["state"] == "running":
         await (comfy if job["kind"] == "video" else music_comfy).interrupt()
     if job["state"] in ("queued", "running"):
-        job = store.update(job_id, state="cancelled")
+        job = runner.cancel(job_id)
     return job
 
 
 @app.websocket("/ws/jobs/{job_id}")
 async def job_events(ws: WebSocket, job_id: str):
-    if not auth.valid(ws.cookies.get(auth.COOKIE)):  # HTTP middleware doesn't see WebSockets
+    # HTTP middleware doesn't see WebSockets: accept a login session or an API key here too
+    key = apikeys.from_headers(ws.headers)
+    if not auth.valid(ws.cookies.get(auth.COOKIE)) and not (key and keys.verify(key)):
         await ws.close(code=4401)
         return
     await ws.accept()
@@ -461,3 +500,11 @@ async def job_events(ws: WebSocket, job_id: str):
         pass
     finally:
         runner.unsubscribe(job_id, q)
+
+
+# REST API v1 for other apps (defined in api_v1.py, which builds on the endpoints above)
+import api_v1  # noqa: E402
+
+app.include_router(api_v1.router)
+app.openapi = api_v1.openapi
+runner.on_finished = api_v1.notify

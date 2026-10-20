@@ -21,6 +21,7 @@ import GenerateForm, { DEFAULTS } from "./GenerateForm";
 import JobDetail from "./JobDetail";
 import JobGallery from "./JobGallery";
 import Login from "./Login";
+import ApiKeys from "./ApiKeys";
 import MusicStudio from "./MusicStudio";
 import ImageStudio from "./ImageStudio";
 import SfxStudio from "./SfxStudio";
@@ -53,6 +54,7 @@ export default function App() {
   );
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>(tabFromHash);
+  const [showKeys, setShowKeys] = useState(false);
   const [slides, setSlides] = useState<SlideItem[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(SLIDES_KEY) ?? "[]");
@@ -175,11 +177,16 @@ export default function App() {
             How to use
           </a>
           <StatusPill health={health} />
+          <button className="link" onClick={() => setShowKeys((v) => !v)}>
+            API keys
+          </button>
           <button className="link" onClick={() => logout().finally(() => setAuthState("out"))}>
             Log out
           </button>
         </div>
       </header>
+
+      {showKeys && <ApiKeys onClose={() => setShowKeys(false)} />}
 
       {tab === "character" ? (
         <CharacterStudio

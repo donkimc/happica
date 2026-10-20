@@ -56,11 +56,14 @@ class JobStore:
         self.db.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
         self.db.commit()
 
-    def list(self, kind: str | None = None, limit: int = 50) -> list[dict]:
+    def list(self, kind: str | None = None, limit: int = 50, state: str | None = None) -> list[dict]:
+        where, args = [], []
         if kind:
-            rows = self.db.execute("SELECT * FROM jobs WHERE kind = ? ORDER BY created DESC LIMIT ?", (kind, limit)).fetchall()
-        else:
-            rows = self.db.execute("SELECT * FROM jobs ORDER BY created DESC LIMIT ?", (limit,)).fetchall()
+            where.append("kind = ?"); args.append(kind)
+        if state:
+            where.append("state = ?"); args.append(state)
+        sql = "SELECT * FROM jobs" + (f" WHERE {' AND '.join(where)}" if where else "") + " ORDER BY created DESC LIMIT ?"
+        rows = self.db.execute(sql, (*args, limit)).fetchall()
         return [self._to_dict(r) for r in rows]
 
     @staticmethod
@@ -86,6 +89,17 @@ class JobRunner:
         self.pipelines = pipelines
         self.queue: asyncio.Queue[tuple[str, Task]] = asyncio.Queue()
         self.subscribers: dict[str, set[asyncio.Queue]] = {}
+        self.on_finished: Callable[[dict], None] | None = None  # called with the job once it's done/failed/cancelled
+
+    def cancel(self, job_id: str) -> dict:
+        """Mark a queued or running job cancelled, telling everyone watching it."""
+        job = self._update(job_id, state="cancelled")
+        self._finished(job)
+        return job
+
+    def _finished(self, job: dict) -> None:
+        if self.on_finished:
+            self.on_finished(job)
 
     def submit(self, prompt: str, settings: dict, kind: str = "video") -> dict:
         job = self.store.create(prompt, settings, kind)
@@ -140,4 +154,4 @@ class JobRunner:
                 final = dict(state="failed", error=str(e))
             current = self.store.get(job_id)
             if current and current["state"] != "cancelled":
-                self._update(job_id, **final)
+                self._finished(self._update(job_id, **final))

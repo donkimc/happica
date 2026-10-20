@@ -196,3 +196,12 @@ p.tight { margin-top: 0; }
 .segmented.small { margin-bottom: 0; }
 .segmented.small button { font-size: 12px; padding: 5px 10px; }
 .narration-source { align-items: center; gap: 8px; margin-top: 12px; }
+
+/* API keys */
+.api-keys code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.new-key { border: 1px solid var(--ok); border-radius: 8px; padding: 10px 12px; margin: 10px 0; font-size: 14px; }
+.new-key code.key { display: block; margin: 8px 0; padding: 8px; background: var(--bg); border-radius: 6px; word-break: break-all; user-select: all; }
+table.keys { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+table.keys th, table.keys td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+table.keys th { color: var(--muted); font-weight: 600; }
+@media (max-width: 560px) { table.keys th:nth-child(3), table.keys td:nth-child(3) { display: none; } }
