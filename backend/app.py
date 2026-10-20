@@ -213,6 +213,9 @@ class JobRequest(BaseModel):
     voice: str = Field(default="af_heart", pattern=tts.VOICE_ID)
     subtitles: str = Field(default="burn", pattern="^(off|soft|burn)$")
     image_steps: int = Field(default=4, ge=1, le=8)
+    image_model: str = Field(default="turbo", pattern="^(turbo|flux)$",
+                             description="turbo = SDXL-Turbo (~5 s per picture); flux = FLUX.1-schnell (~4-5 min per picture at 576x1024, "
+                                         "follows descriptions closely, cleaner faces and eyes; no characters)")
     video_steps: int = Field(default=8, ge=4, le=30)
     seed: int | None = None
     music: str = Field(default="off", pattern="^(off|auto|library)$")
@@ -293,6 +296,7 @@ def submit_video(req: JobRequest, extra: dict | None = None) -> dict:
     _check_library_track(req.music, req.music_track)
     _check_library_track(req.ambience, req.ambience_track, "sound from the Sound library")
     _check_character(req.character)
+    _check_image_model(req.image_model, req.character, req.art_characters)
     for art_id in req.art_characters:
         ch = character.load(art_id)
         if not ch or ch.get("kind") != "art":
@@ -458,12 +462,16 @@ class ImageRequest(BaseModel):
     count: int = Field(default=4, ge=1, le=4)
     character: str = ""  # a character id: their face via PhotoMaker
     image_steps: int = Field(default=4, ge=1, le=8)
+    image_model: str = Field(default="turbo", pattern="^(turbo|flux)$",
+                             description="turbo = SDXL-Turbo (~5 s per picture); flux = FLUX.1-schnell (~4-5 min per picture at 576x1024, "
+                                         "follows descriptions closely, cleaner faces and eyes; no characters)")
     seed: int | None = None
 
 
 @app.post("/api/images")
 async def create_images(req: ImageRequest):
     _check_character(req.character)
+    _check_image_model(req.image_model, req.character)
     return runner.submit(req.prompt.strip()[:80], req.model_dump(), "image")
 
 
@@ -501,6 +509,12 @@ async def create_character(req: CharacterRequest):
 def _check_character(character_id: str) -> None:
     if character_id and not character.load(character_id):
         raise HTTPException(400, "That character doesn't exist any more")
+
+
+def _check_image_model(model: str, character_id: str = "", art: list[str] | None = None) -> None:
+    if model == "flux" and (character_id or art):
+        raise HTTPException(400, "Characters need the Turbo picture model (PhotoMaker and IP-Adapter are SDXL-only); "
+                                 "with FLUX, describe the character in the story's characters instead")
 
 
 class VoiceRequest(BaseModel):

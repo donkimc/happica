@@ -89,6 +89,7 @@ export interface ImageSettings {
   height: number;
   count: number;
   character?: string; // a character job id
+  image_model?: ImageModel;
 }
 
 export interface VoiceSettings {
@@ -143,6 +144,9 @@ export interface Voice {
   gender: "female" | "male";
 }
 
+// turbo = SDXL-Turbo (~5 s a picture); flux = FLUX.1-schnell (~4–5 min, follows descriptions, cleaner eyes; no characters)
+export type ImageModel = "turbo" | "flux";
+
 export interface JobSettings {
   width: number;
   height: number;
@@ -155,6 +159,7 @@ export interface JobSettings {
   characters?: Record<string, string>; // name → look, spelled out in every picture prompt that names them
   sfx_auto?: boolean; // lines/story: the AI adds a sound effect to every scene
   art_characters?: string[]; // cartoon characters (reference art) drawn with IP-Adapter
+  image_model?: ImageModel;
   song?: SongBlock | null; // a sung song: bed, intro/outro or the whole story
   caption_style?: CaptionStyle | null;
   output_height?: number | null; // e.g. 1920: 576×1024 is exported as 1080×1920

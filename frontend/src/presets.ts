@@ -49,7 +49,8 @@ export const matches = (preset: Preset, s: JobSettings) =>
  */
 export function estimateSeconds(s: JobSettings, sceneCount: number): number {
   const n = Math.max(1, sceneCount);
-  let t = 25 + 5 * n; // images
+  // images: FLUX loads ~40 s, then ~60 s per step per 576×1024 picture on the M2 (4 steps)
+  let t = s.image_model === "flux" ? 40 + 270 * n : 25 + 5 * n;
   if (s.scene_mode === "llm") t += 15;
   if (s.narrate) t += 7 * n;
   if (s.motion === "kenburns") t += n;

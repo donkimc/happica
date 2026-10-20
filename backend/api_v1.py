@@ -308,6 +308,9 @@ class StoryRequest(BaseModel):
     caption_style: main.CaptionStyle | None = None
     hashtags: list[str] = Field(default_factory=list, max_length=30)
     caption: str = Field(default="", max_length=2000, description="Text for caption.txt, between the title and hashtags")
+    image_model: str = Field(default="turbo", pattern="^(turbo|flux)$",
+                             description="turbo = SDXL-Turbo (fast); flux = FLUX.1-schnell (~4-5 min per picture at 576x1024, follows "
+                                         "character descriptions closely, cleaner eyes; can't be combined with art_characters)")
     seed: int | None = None
     webhook_url: str | None = WEBHOOK
 
@@ -332,7 +335,8 @@ def _story_settings(story: StoryRequest, song_track: str = "") -> main.JobReques
         art_characters=story.art_characters, style=story.style, voice=story.voice, motion=story.motion,
         narrate=any(sc.narration.strip() for sc in story.scenes), subtitles=story.subtitles, width=story.width,
         height=story.height, output_height=story.output_height, upscale=story.upscale, clip_seconds=story.clip_seconds,
-        fade=story.fade, music_volume=story.music_volume, caption_style=story.caption_style, seed=story.seed, song=song)
+        fade=story.fade, music_volume=story.music_volume, caption_style=story.caption_style, seed=story.seed, song=song,
+        image_model=story.image_model)
     return req
 
 

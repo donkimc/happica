@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cancelJob, createImages, deleteJob, Health, ImageSettings, isActive, Job, outputUrl, rerunJob } from "./api";
+import { cancelJob, createImages, deleteJob, Health, ImageModel, ImageSettings, isActive, Job, outputUrl, rerunJob } from "./api";
 
 export const IMAGE_DEFAULTS: ImageSettings = { prompt: "", style: "", width: 768, height: 512, count: 4 };
 
@@ -31,6 +31,7 @@ export default function ImageStudio({ characters, jobs, health, upsert, remove, 
   const set = (patch: Partial<ImageSettings>) => setSettings((s) => ({ ...s, ...patch }));
   const offline = health !== null && health.comfyui !== "ok";
   const big = settings.width * settings.height > 600_000;
+  const flux = settings.image_model === "flux" && !settings.character;
 
   return (
     <>
@@ -83,6 +84,18 @@ export default function ImageStudio({ characters, jobs, health, upsert, remove, 
             </select>
           </label>
           <label>
+            Picture model
+            <select
+              value={settings.image_model ?? "turbo"}
+              disabled={!!settings.character}
+              title={settings.character ? "Characters need Turbo" : undefined}
+              onChange={(e) => set({ image_model: e.target.value as ImageModel })}
+            >
+              <option value="turbo">Turbo (fast)</option>
+              <option value="flux">FLUX (best detail, slow)</option>
+            </select>
+          </label>
+          <label>
             Images
             <select value={settings.count} onChange={(e) => set({ count: Number(e.target.value) })}>
               {[1, 2, 3, 4].map((n) => (
@@ -98,7 +111,8 @@ export default function ImageStudio({ characters, jobs, health, upsert, remove, 
             </button>
             {settings.prompt.trim() && (
               <span className="muted">
-                about {Math.round((25 + settings.count * (settings.character ? 10 : big ? 15 : 5)) / 5) * 5} s
+                about {flux ? `${Math.round((40 + settings.count * 270) / 60)} min`
+                  : `${Math.round((25 + settings.count * (settings.character ? 10 : big ? 15 : 5)) / 5) * 5} s`}
               </span>
             )}
           </div>

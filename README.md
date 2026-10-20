@@ -58,6 +58,14 @@ curl -L -o models/checkpoints/stable_audio_3_small_sfx.safetensors $B/checkpoint
 curl -L -o models/text_encoders/t5gemma_b_b_ul2.safetensors $B/text_encoders/t5gemma_b_b_ul2.safetensors
 ```
 
+Better pictures (optional): FLUX.1-schnell as a Q5 GGUF, picked per job with `image_model: "flux"` (the **Picture model** menu). It follows long descriptions closely and draws cleaner faces and eyes than SDXL-Turbo, at ~4–5 min per picture at 576×1024; it can't use characters (PhotoMaker and IP-Adapter are SDXL-only). Apache 2.0 license. Needs the [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) custom nodes (`git clone` into `engine/ComfyUI/custom_nodes`, then `uv pip install --python engine/ComfyUI/.venv/bin/python gguf sentencepiece protobuf`) and reuses the T5-XXL above (8.8 GB):
+
+```bash
+curl -L -o models/diffusion_models/flux1-schnell-Q5_K_S.gguf https://huggingface.co/city96/FLUX.1-schnell-gguf/resolve/main/flux1-schnell-Q5_K_S.gguf
+curl -L -o models/text_encoders/clip_l.safetensors https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors
+curl -L -o models/vae/flux_ae.safetensors https://huggingface.co/Comfy-Org/Lumina_Image_2.0_Repackaged/resolve/main/split_files/vae/ae.safetensors
+```
+
 Characters (PhotoMaker v1, 0.93 GB):
 
 ```bash
@@ -160,6 +168,7 @@ Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves th
 | Step | Time |
 |---|---|
 | Images (SDXL-Turbo, 768×512) | ~25 s to load the model once per job, then ~5 s per image |
+| Images (FLUX.1-schnell Q5, 576×1024) | ~40 s to load, then ~4–5 min per image (4 steps at ~60 s); 512×896 ≈ 3.5 min |
 | Story → scenes (qwen2.5:3b) | ~15 s |
 | Narration (Kokoro) | ~5–10 s per scene |
 | Pan & zoom clip | < 1 s |

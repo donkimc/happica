@@ -1,4 +1,8 @@
-"""Text → image via the SDXL-Turbo ComfyUI workflow.
+"""Text → image via the SDXL-Turbo ComfyUI workflow, or FLUX.1-schnell (`image_model: "flux"`).
+
+FLUX follows long descriptions far better (a character's colours, horns, outfit) and draws cleaner faces and eyes,
+at ~4–5 min per image (576×1024, ~60 s per step on the M2) instead of ~5 s. It runs as a Q5 GGUF (ComfyUI-GGUF custom nodes) so it fits in 16 GB, and
+ignores negative prompts (schnell is distilled: cfg 1). Faces and art characters need SDXL, so they stay on Turbo.
 
 Characters: a real person's face via PhotoMaker, or a cartoon character from 1–3 pictures of it ("art"
 characters) via IP-Adapter Plus for SDXL (workflows/ipadapter_t2i.json), which carries its colours and shape.
@@ -16,6 +20,8 @@ from comfy_client import ComfyClient
 from config import OUTPUTS_DIR, WORKFLOWS_DIR
 
 WORKFLOW = json.loads((WORKFLOWS_DIR / "sdxl_turbo_t2i.json").read_text())
+FLUX_WORKFLOW = json.loads((WORKFLOWS_DIR / "flux_schnell_t2i.json").read_text())
+MODELS = ("turbo", "flux")
 IPADAPTER = json.loads((WORKFLOWS_DIR / "ipadapter_t2i.json").read_text())
 ART_WEIGHT = 0.7  # IP-Adapter strength: higher copies the reference pose too, lower drifts off-model
 ART_STEPS = 6  # like PhotoMaker, the extra conditioning needs a couple more turbo steps
@@ -50,6 +56,11 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
                     art: list[str | None] | None = None, art_refs: dict[str, list[str]] | None = None) -> dict:
     """One branch per prompt. Branches flagged in `with_face` are conditioned on the uploaded face with PhotoMaker
     (their prompt must contain the trigger word "img" after the class word, e.g. "a woman img")."""
+    if settings.get("image_model") == "flux":
+        if face or any(art or []):
+            raise RuntimeError("FLUX can't use characters (PhotoMaker and IP-Adapter are SDXL-only); "
+                               "pick the Turbo picture model, or describe the character in the prompt instead")
+        return _flux_workflow(prompts, seeds, names, settings)
     base = copy.deepcopy(WORKFLOW)
     base["negative"]["inputs"]["text"] = NEGATIVE
     base["latent"]["inputs"].update(width=settings["width"], height=settings["height"])
@@ -86,6 +97,25 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
             if art[i]:  # this scene shows an art character: sample with its IP-Adapter model
                 branch[f"sampler_{i}"]["inputs"].update(model=[f"apply_{art[i]}", 0], sigmas=["sigmas_art", 0])
         branch[f"sampler_{i}"]["inputs"]["noise_seed"] = seed
+        branch[f"save_{i}"]["inputs"]["filename_prefix"] = f"happica/{name}"
+        wf.update(branch)
+    return wf
+
+
+def _flux_workflow(prompts: list[str], seeds: list[int], names: list[str], settings: dict) -> dict:
+    """FLUX.1-schnell: the same shape as the Turbo batch (shared loaders and latent, one branch per scene)."""
+    base = copy.deepcopy(FLUX_WORKFLOW)
+    base["latent"]["inputs"].update(width=settings["width"], height=settings["height"])
+    wf = {nid: node for nid, node in base.items() if nid not in PER_SCENE}
+    style = settings.get("style", "").strip()
+    for i, (prompt, seed, name) in enumerate(zip(prompts, seeds, names)):
+        branch = {f"{nid}_{i}": copy.deepcopy(base[nid]) for nid in PER_SCENE}
+        for node in branch.values():
+            for key, value in node["inputs"].items():
+                if isinstance(value, list) and value[0] in PER_SCENE:
+                    node["inputs"][key] = [f"{value[0]}_{i}", value[1]]
+        branch[f"positive_{i}"]["inputs"]["text"] = f"{prompt}, {style}" if style else prompt
+        branch[f"sampler_{i}"]["inputs"].update(seed=seed, steps=settings.get("image_steps", 4))
         branch[f"save_{i}"]["inputs"]["filename_prefix"] = f"happica/{name}"
         wf.update(branch)
     return wf

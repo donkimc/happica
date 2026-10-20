@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction, useEffect, useState } from "react";
-import { Health, Job, JobSettings, listVoices, Voice } from "./api";
+import { Health, ImageModel, Job, JobSettings, listVoices, Voice } from "./api";
 import SoundPicker, { libraryTracks } from "./MusicPicker";
 import ScriptEditor from "./ScriptEditor";
 import SlidesEditor, { SlideItem } from "./SlidesEditor";
@@ -274,6 +274,18 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
           />
         </label>
         )}
+        <label>
+          Picture model
+          <select
+            value={settings.image_model ?? "turbo"}
+            disabled={!!settings.character || !!settings.art_characters?.length}
+            title={settings.character || settings.art_characters?.length ? "Characters need Turbo" : undefined}
+            onChange={(e) => set({ image_model: e.target.value as ImageModel })}
+          >
+            <option value="turbo">Turbo (fast)</option>
+            <option value="flux">FLUX (best detail, slow)</option>
+          </select>
+        </label>
         <label>
           Motion
           <select value={settings.motion} onChange={(e) => set({ motion: e.target.value as JobSettings["motion"] })}>
