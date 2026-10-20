@@ -36,6 +36,8 @@ runner = JobRunner(store, {
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if recovered := runner.recover():  # jobs a restart interrupted start again
+        print(f"Re-queued {len(recovered)} job(s) interrupted by a restart: {', '.join(recovered)}", flush=True)
     worker = asyncio.create_task(runner.run_forever())
     yield
     worker.cancel()
@@ -143,6 +145,40 @@ class ScriptScene(BaseModel):
                                     description="Overrides the job's motion for this scene; none = a still picture")
 
 
+class CaptionStyle(BaseModel):
+    font_size_scale: float = Field(default=1.0, ge=0.5, le=2.0, description="1 = default size")
+    color: str = Field(default="#ffffff", pattern=r"^#[0-9a-fA-F]{6}$", description="Narration subtitles")
+    lyric_color: str = Field(default="#ffe14d", pattern=r"^#[0-9a-fA-F]{6}$", description="Sung-lyric subtitles")
+    position: str = Field(default="bottom", pattern="^(bottom|lower_third)$")
+    box: bool = Field(default=False, description="A rounded dark panel behind the text (instead of an outline)")
+    font: str = Field(default="rounded", pattern="^(rounded|handwritten|system)$",
+                      description="Korean text: rounded (Jua), handwritten (Gamja Flower) or system (Apple SD Gothic Neo)")
+
+
+class SongSpec(BaseModel):
+    """A song made for this video (like POST /music, one take)."""
+    title: str = Field(default="", max_length=200)
+    tags: str = Field(min_length=1, max_length=500, description="Style, e.g. \"korean children's song, cheerful, cute female vocal\"")
+    lyrics: str = Field(default="", max_length=5000, description="With [verse]/[chorus] tags; empty = instrumental")
+    bpm: int = Field(default=110, ge=30, le=300)
+    keyscale: str = "C major"
+    timesignature: str = Field(default="4", pattern="^[2346]$")
+    language: str = Field(default="ko", pattern="^[a-z]{2,3}$")
+    duration: float = Field(default=60, ge=10, le=240)
+    seed: int | None = None
+
+
+class SongBlock(BaseModel):
+    """A sung song in the video. placement: "bed" — under the narration, ducked (like music); "intro_outro" — the
+    sung chorus at full volume over the opening and the ending, its instrumental under the narrated middle;
+    "sung_story" — no narration, the song tells the story and scenes follow its lyric lines."""
+    track: str = Field(default="", description="A Music library take (.flac path); or give spec")
+    spec: SongSpec | None = Field(default=None, description="Or make a new song for this video")
+    placement: str = Field(default="bed", pattern="^(bed|intro_outro|sung_story)$")
+    volume: float = Field(default=0.5, ge=0, le=1, description="Level of the sung parts (intro/outro, sung story); 0.5 sits a little above the narration")
+    lyrics_subtitles: bool = Field(default=True, description="Burn the sung lyrics as (yellow) subtitles")
+
+
 class JobRequest(BaseModel):
     prompt: str = Field(min_length=1, description="The idea or story; in script mode, the video's title")
     width: int = 768
@@ -158,8 +194,18 @@ class JobRequest(BaseModel):
     characters: dict[str, str] = Field(default_factory=dict, max_length=12,
                                        description="Name → look; every image prompt naming a character gets the look spelled out")
     sfx_auto: bool = Field(default=False, description="lines/llm modes: the AI adds a sound effect to every scene")
+    song: SongBlock | None = Field(default=None, description="A sung song: as a bed, as intro/outro, or as the whole story")
+    caption_style: CaptionStyle | None = Field(default=None, description="How burned-in subtitles look")
+    output_height: int | None = Field(default=None, ge=256, le=2160,
+                                      description="Final video height, e.g. 1920: 576×1024 is exported as 1080×1920")
+    upscale: str = Field(default="fast", pattern="^(fast|ai)$",
+                         description="How the final video is enlarged to output_height: fast (lanczos, seconds) or ai "
+                                     "(Real-ESRGAN, ~1 s per frame); captions are drawn at the final size either way")
     song_track: str = ""  # musicvideo: a Music library take's .flac under outputs/
-    character: str = ""  # a character id: scenes that name them get their face
+    character: str = Field(default="", description="A real-person character id: scenes that name them get their face")
+    art_characters: list[str] = Field(default_factory=list, max_length=4,
+                                      description="Cartoon (art) character ids: scenes that name one are drawn from its reference pictures")
+    art_weight: float = Field(default=0.7, ge=0.3, le=1.0, description="How strongly art characters follow their pictures")
     slides: list[Slide] = Field(default_factory=list, max_length=30)
     slides_narration: str = Field(default="mine", pattern="^(mine|ai)$")  # "ai": a vision model writes it from the pictures
     theme: str = Field(default="", max_length=500)  # what a My pictures video is about (guides AI narration)
@@ -186,6 +232,26 @@ def _check_library_track(choice: str, track: str, what: str = "song from the Mus
     path = (OUTPUTS_DIR / track).resolve()
     if not track or path.parent.parent != OUTPUTS_DIR.resolve() or path.suffix != ".flac" or not path.is_file():
         raise HTTPException(400, f"Pick a {what}")
+
+
+def _check_song(req: "JobRequest") -> None:
+    song = req.song
+    if bool(song.track) == bool(song.spec):
+        raise HTTPException(400, "song: give either track (a Music library take) or spec (a new song)")
+    if song.track:
+        music_job = store.get(song.track.split("/")[0])
+        if not music_job or music_job["kind"] != "music":
+            raise HTTPException(400, "song.track must be a Music library take")
+        if music_job["state"] not in ("queued", "running"):  # a song still being made (story batches) is checked when used
+            _check_library_track("library", song.track, "song from the Music library")
+        lyrics = "" if music_job["settings"].get("instrumental") else music_job["settings"].get("lyrics", "")
+    else:
+        lyrics = song.spec.lyrics
+    if song.placement == "sung_story" and not lyrics.strip():
+        raise HTTPException(400, "A sung story needs a song with lyrics")
+    if song.placement == "sung_story":
+        req.narrate = False  # the song tells the story
+    req.music = "off"  # the song is the music
 
 
 @app.get("/api/health")
@@ -219,17 +285,28 @@ async def list_voices():
 
 @app.post("/api/jobs")
 async def create_job(req: JobRequest):
+    return submit_video(req)
+
+
+def submit_video(req: JobRequest, extra: dict | None = None) -> dict:
+    """Check a video request and queue it; `extra` settings ride along (e.g. a story's title and hashtags)."""
     _check_library_track(req.music, req.music_track)
     _check_library_track(req.ambience, req.ambience_track, "sound from the Sound library")
     _check_character(req.character)
+    for art_id in req.art_characters:
+        ch = character.load(art_id)
+        if not ch or ch.get("kind") != "art":
+            raise HTTPException(400, f"{art_id} isn't a cartoon (art) character")
     if req.scene_mode == "musicvideo":
         _check_library_track("library", req.song_track, "song for the music video")
         song = store.get(req.song_track.split("/")[0])
         if not song or song["kind"] != "music":
             raise HTTPException(400, "Pick a song from the Music library")
-        # The song is the soundtrack, at full level (nothing to duck under); no narration or subtitles
+        # The song is the soundtrack, at full level (nothing to duck under); no narration. Subtitles are the sung lyrics.
         req.music, req.music_track, req.music_title = "library", req.song_track, song["settings"].get("title", "")
-        req.music_volume, req.narrate, req.subtitles = 0.4, False, "off"
+        req.music_volume, req.narrate = 0.4, False
+        if song["settings"].get("instrumental"):
+            req.subtitles = "off"
     for name, look in req.characters.items():
         if not 1 <= len(name.strip()) <= 40 or len(look) > 300:
             raise HTTPException(400, "Character names are 1-40 characters and looks at most 300")
@@ -238,6 +315,8 @@ async def create_job(req: JobRequest):
             raise HTTPException(400, "Add at least one scene to the script")
         if "narrate" not in req.model_fields_set:  # a script with narration is meant to be spoken
             req.narrate = any(s.narration.strip() for s in req.script)
+    if req.song:
+        _check_song(req)
     if req.scene_mode == "slides":
         if not req.slides:
             raise HTTPException(400, "Add at least one image")
@@ -245,7 +324,7 @@ async def create_job(req: JobRequest):
             path = (OUTPUTS_DIR / slide.image).resolve()
             if not path.is_relative_to(OUTPUTS_DIR.resolve()) or path.suffix != ".png" or not path.is_file():
                 raise HTTPException(400, f"Image not found: {slide.image}")
-    return runner.submit(req.prompt, req.model_dump(exclude={"prompt"}))
+    return runner.submit(req.prompt, {**req.model_dump(exclude={"prompt"}), **(extra or {})})
 
 
 class SoundChange(BaseModel):
@@ -389,15 +468,28 @@ async def create_images(req: ImageRequest):
 
 
 class CharacterRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=40, pattern=r"^[\w .'-]+$")
-    photo: str  # an upload under outputs/uploads/
-    kind: str = Field(default="person", pattern="^(woman|man|girl|boy|person)$")
-    look: str = Field(default="", max_length=300)  # hair, skin, eyes… what PhotoMaker alone tends to lose
-    consent: bool = False
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[\w .'-]+$",
+                      description="The name scenes use for them, e.g. Ttori")
+    photo: str = Field(default="", description="A face photo (an upload) for a real person")
+    kind: str = Field(default="person", pattern="^(woman|man|girl|boy|person|art)$",
+                      description="art = a cartoon character from reference pictures (IP-Adapter); others = a real face")
+    refs: list[str] = Field(default_factory=list, max_length=3, description="art: 1-3 uploaded pictures of the character")
+    look: str = Field(default="", max_length=300, description="Hair, colours, clothes… spelled out in every prompt")
+    style: str = Field(default="", max_length=300, description="art: the drawing style of the character sheet")
+    consent: bool = Field(default=False, description="Real people only: the photo is of you or someone who agreed")
 
 
 @app.post("/api/characters")
 async def create_character(req: CharacterRequest):
+    if req.kind == "art":
+        if not req.refs:
+            raise HTTPException(400, "Upload 1-3 pictures of the character")
+        for ref in req.refs:
+            path = (OUTPUTS_DIR / ref).resolve()
+            if path.parent != UPLOADS.resolve() or not path.is_file():
+                raise HTTPException(400, f"Upload the pictures first ({ref} isn't an upload)")
+        req.photo = req.refs[0]  # the thumbnail
+        return runner.submit(req.name, req.model_dump(), "character")
     if not req.consent:
         raise HTTPException(400, "Only use photos of yourself, or of people who agreed to it")
     path = (OUTPUTS_DIR / req.photo).resolve()
@@ -520,6 +612,8 @@ async def cancel_job(job_id: str):
     job = _get_or_404(job_id)
     if job["state"] == "running":
         await (comfy if job["kind"] == "video" else music_comfy).interrupt()
+        if job["kind"] == "video":  # its song and sound effects run on the music engine
+            await music_comfy.interrupt()
     if job["state"] in ("queued", "running"):
         job = runner.cancel(job_id)
     return job

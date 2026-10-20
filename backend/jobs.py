@@ -91,6 +91,21 @@ class JobRunner:
         self.subscribers: dict[str, set[asyncio.Queue]] = {}
         self.on_finished: Callable[[dict], None] | None = None  # called with the job once it's done/failed/cancelled
 
+    def recover(self) -> list[str]:
+        """After a restart: queue again the jobs that were waiting or running when the backend stopped (oldest
+        first, from the beginning). A finished job that was only being edited (a scene or a sound redone) goes
+        back to done as it was."""
+        recovered = []
+        for job in sorted(self.store.list(None, 1000, "running") + self.store.list(None, 1000, "queued"),
+                          key=lambda j: j["created"]):
+            if job["kind"] == "video" and (job["result"] or {}).get("video"):
+                self.store.update(job["id"], state="done", stage="", progress=1.0)
+            elif job["kind"] in self.pipelines:
+                self.store.update(job["id"], state="queued", stage="restarted", progress=0.0, error=None)
+                self.queue.put_nowait((job["id"], self.pipelines[job["kind"]]))
+                recovered.append(job["id"])
+        return recovered
+
     def cancel(self, job_id: str) -> dict:
         """Mark a queued or running job cancelled, telling everyone watching it."""
         job = self._update(job_id, state="cancelled")

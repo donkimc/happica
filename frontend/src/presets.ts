@@ -32,6 +32,12 @@ export const PRESETS: Preset[] = [
     hint: "LTX-Video animates every scene — best result, slowest",
     settings: { scene_mode: "llm", width: 768, height: 512, max_scenes: 3, motion: "ltx", clip_seconds: 3, narrate: true, subtitles: "burn" },
   },
+  {
+    id: "tiktok",
+    name: "TikTok story 9:16",
+    hint: "My script at 576×1024, exported 1080×1920 with narration and kid-friendly captions",
+    settings: { scene_mode: "script", width: 576, height: 1024, motion: "kenburns", clip_seconds: 3, narrate: true, subtitles: "burn", output_height: 1920, upscale: "fast" },
+  },
 ];
 
 export const matches = (preset: Preset, s: JobSettings) =>

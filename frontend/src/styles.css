@@ -241,3 +241,4 @@ table.keys th { color: var(--muted); font-weight: 600; }
 .cue-line input { flex: 1; min-width: 120px; font-size: 12px; padding: 4px 6px; }
 .cue-line .play { font-size: 12px; }
 @media (max-width: 640px) { .script .name { width: 90px; } }
+.ref-thumb { background: none; padding: 0; border: 0; cursor: pointer; }

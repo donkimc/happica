@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { JobSettings, ScriptScene, SfxCue } from "./api";
+import { CaptionStyle, Job, JobSettings, ScriptScene, SfxCue, SongBlock } from "./api";
+import { libraryTracks } from "./MusicPicker";
 
 interface Props {
   title: string;
   settings: JobSettings;
   onTitle: (t: string) => void;
   onSettings: (patch: Partial<JobSettings>) => void;
+  library?: Job[]; // Music library, for the song
+  artCharacters?: Job[]; // cartoon characters made from reference art
 }
 
 const MAX_SCENES = 16;
@@ -36,7 +39,7 @@ export function parseStory(text: string): { title?: string; patch: Partial<JobSe
 }
 
 /** My script: write every scene yourself — picture, narration, motion and sound effects. Nothing is rewritten by AI. */
-export default function ScriptEditor({ title, settings, onTitle, onSettings }: Props) {
+export default function ScriptEditor({ title, settings, onTitle, onSettings, library = [], artCharacters = [] }: Props) {
   const script = settings.script?.length ? settings.script : [blank()];
   const characters = Object.entries(settings.characters ?? {});
   const [pasting, setPasting] = useState(false);
@@ -106,6 +109,24 @@ export default function ScriptEditor({ title, settings, onTitle, onSettings }: P
         </button>
       </fieldset>
 
+      {artCharacters.length > 0 && (
+        <fieldset>
+          <legend>Cartoon characters — scenes that name one are drawn from its pictures</legend>
+          <div className="row tight">
+            {artCharacters.map((c) => {
+              const on = (settings.art_characters ?? []).includes(c.id);
+              return (
+                <label className="check" key={c.id}>
+                  <input type="checkbox" checked={on} disabled={!on && (settings.art_characters ?? []).length >= 4}
+                    onChange={() => onSettings({ art_characters: on ? (settings.art_characters ?? []).filter((x) => x !== c.id) : [...(settings.art_characters ?? []), c.id] })} />
+                  {c.settings.name as string}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
+
       {script.map((scene, i) => (
         <fieldset className="script-scene" key={i}>
           <legend>
@@ -168,6 +189,101 @@ export default function ScriptEditor({ title, settings, onTitle, onSettings }: P
         + Add scene
       </button>
       <span className="muted"> {script.length} of {MAX_SCENES} scenes</span>
+      <SongOptions settings={settings} library={library} onSettings={onSettings} />
+      <ExportOptions settings={settings} onSettings={onSettings} />
     </div>
+  );
+}
+
+/** A sung song from the Music library: under the narration, as a sung intro and outro, or as the whole story. */
+function SongOptions({ settings, library, onSettings }: { settings: JobSettings; library: Job[]; onSettings: Props["onSettings"] }) {
+  const tracks = libraryTracks(library.filter((j) => j.kind === "music"));
+  const song = settings.song ?? null;
+  const set = (patch: Partial<SongBlock>) => onSettings({ song: { placement: "intro_outro", track: "", ...song, ...patch } });
+  return (
+    <fieldset>
+      <legend>Song</legend>
+      <div className="row tight">
+        <label className="grow">
+          Song from your Music library
+          <select value={song?.track ?? ""} onChange={(e) => (e.target.value ? set({ track: e.target.value }) : onSettings({ song: null }))}>
+            <option value="">None</option>
+            {tracks.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </label>
+        {song?.track && (
+          <label>
+            How it plays
+            <select value={song.placement} onChange={(e) => set({ placement: e.target.value as SongBlock["placement"] })}>
+              <option value="intro_outro">Sung intro &amp; outro, instrumental under the story</option>
+              <option value="bed">Under the narration</option>
+              <option value="sung_story">Sung story (no narration)</option>
+            </select>
+          </label>
+        )}
+      </div>
+      {song?.track && song.placement !== "bed" && (
+        <p className="muted">Sung lyrics are timed to the singing and shown as yellow subtitles (takes ~1 min the first time a song is used).</p>
+      )}
+    </fieldset>
+  );
+}
+
+/** Caption look and the final export size. */
+function ExportOptions({ settings, onSettings }: { settings: JobSettings; onSettings: Props["onSettings"] }) {
+  const style: CaptionStyle = settings.caption_style ?? {};
+  const setStyle = (patch: Partial<CaptionStyle>) => onSettings({ caption_style: { ...style, ...patch } });
+  const portrait = settings.height > settings.width;
+  const target = portrait ? 1920 : 1080;
+  return (
+    <fieldset>
+      <legend>Captions &amp; export</legend>
+      <div className="row tight">
+        <label>
+          Caption font
+          <select value={style.font ?? "rounded"} onChange={(e) => setStyle({ font: e.target.value as CaptionStyle["font"] })}>
+            <option value="rounded">Rounded (Jua)</option>
+            <option value="handwritten">Handwritten (Gamja Flower)</option>
+            <option value="system">Plain (Apple SD Gothic Neo)</option>
+          </select>
+        </label>
+        <label>
+          Size
+          <select value={style.font_size_scale ?? 1} onChange={(e) => setStyle({ font_size_scale: Number(e.target.value) })}>
+            <option value={0.85}>Small</option>
+            <option value={1}>Normal</option>
+            <option value={1.2}>Large</option>
+          </select>
+        </label>
+        <label>
+          Position
+          <select value={style.position ?? "bottom"} onChange={(e) => setStyle({ position: e.target.value as CaptionStyle["position"] })}>
+            <option value="bottom">Bottom</option>
+            <option value="lower_third">Lower third</option>
+          </select>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={!!style.box} onChange={(e) => setStyle({ box: e.target.checked })} />
+          Dark box
+        </label>
+      </div>
+      <div className="row tight">
+        <label className="check">
+          <input type="checkbox" checked={!!settings.output_height} onChange={(e) => onSettings({ output_height: e.target.checked ? target : null })} />
+          Export at {portrait ? "1080×1920" : "1620×1080"}
+        </label>
+        {!!settings.output_height && (
+          <label>
+            Enlarge with
+            <select value={settings.upscale ?? "fast"} onChange={(e) => onSettings({ upscale: e.target.value as "fast" | "ai" })}>
+              <option value="fast">Fast resize (seconds)</option>
+              <option value="ai">AI upscale (~1 s per frame)</option>
+            </select>
+          </label>
+        )}
+      </div>
+    </fieldset>
   );
 }

@@ -20,7 +20,7 @@ cd "$ROOT/engine/ComfyUI"
 "$UV" pip install --python .venv/bin/python -r requirements.txt
 
 # Models live outside the engine so ComfyUI can be reinstalled without re-downloading them
-mkdir -p "$ROOT"/models/{checkpoints,diffusion_models,text_encoders,vae,loras,upscale_models,photomaker,tts}
+mkdir -p "$ROOT"/models/{checkpoints,diffusion_models,text_encoders,vae,loras,upscale_models,photomaker,tts,ipadapter,clip_vision}
 cat > "$ROOT/models/extra_model_paths.yaml" <<EOF
 happica:
   base_path: $ROOT/models
@@ -32,7 +32,16 @@ happica:
   loras: loras
   upscale_models: upscale_models
   photomaker: photomaker
+  ipadapter: ipadapter
+  clip_vision: clip_vision
 EOF
+
+# IP-Adapter nodes (cartoon characters from reference art)
+[ -d custom_nodes/ComfyUI_IPAdapter_plus ] || git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus custom_nodes/ComfyUI_IPAdapter_plus
+
+# Song tools (stems + lyric timing) in their own venv, so ComfyUI's packages stay untouched
+[ -d "$ROOT/engine/audio-tools/.venv" ] || "$UV" venv --python 3.12 "$ROOT/engine/audio-tools/.venv"
+"$UV" pip install --python "$ROOT/engine/audio-tools/.venv/bin/python" "torch==2.8.0" "torchaudio==2.8.0" demucs mlx-whisper soundfile numpy
 
 # Backend
 cd "$ROOT/backend"

@@ -5,9 +5,14 @@ import { IMAGE_DEFAULTS } from "./ImageStudio";
 export interface CharacterSettings {
   name: string;
   photo: string;
-  kind: "woman" | "man" | "girl" | "boy" | "person";
+  kind: "woman" | "man" | "girl" | "boy" | "person" | "art";
   look: string;
+  refs?: string[]; // art: 1–3 pictures of the cartoon character
+  style?: string;
 }
+
+const ART_STYLE = "cute 2D children's picture book illustration, soft pastel colors, clean thick outlines";
+const ART_CHANGES = ["waving happily", "running in a flower meadow", "sleeping under a tree", "in the snow", "eating rice cake", "dancing with friends"];
 
 const CHANGES = ["as a 70-year-old", "as a child", "as a teenager", "with long straight hair", "as a medieval knight", "as an astronaut", "in a 1920s portrait", "as a watercolor painting"];
 
@@ -23,12 +28,25 @@ interface Props {
 export default function CharacterStudio({ characters, images, upsert, remove, act, error }: Props) {
   const [form, setForm] = useState<CharacterSettings>({ name: "", photo: "", kind: "woman", look: "" });
   const [consent, setConsent] = useState(false);
+  const [art, setArt] = useState(false);
+  const [refs, setRefs] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const set = (patch: Partial<CharacterSettings>) => setForm((f) => ({ ...f, ...patch }));
 
   return (
     <>
       <section className="card" id="character-form">
+        <div className="segmented" role="radiogroup" aria-label="Kind of character">
+          <button role="radio" aria-checked={!art} className={!art ? "on" : ""} onClick={() => setArt(false)}>Real person (face photo)</button>
+          <button role="radio" aria-checked={art} className={art ? "on" : ""} onClick={() => setArt(true)}>Cartoon (reference art)</button>
+        </div>
+        {art ? (
+          <ArtForm refs={refs} setRefs={setRefs} act={act} error={error} onCreate={(f) => act(async () => {
+            upsert(await createCharacter({ ...f, kind: "art", photo: "", refs, consent: false }));
+            setRefs([]);
+          })} />
+        ) : (
+        <>
         <p className="muted tight">
           Upload one clear photo of a face. Happica learns the face and keeps it in new pictures and videos — older,
           younger, in costume or in any scene.
@@ -100,6 +118,8 @@ export default function CharacterStudio({ characters, images, upsert, remove, ac
           details consistent when the character is aged or restyled.
         </p>
         {error && <p className="error">{error}</p>}
+        </>
+        )}
       </section>
 
       <section>
@@ -116,6 +136,75 @@ export default function CharacterStudio({ characters, images, upsert, remove, ac
           />
         ))}
       </section>
+    </>
+  );
+}
+
+/** A cartoon character from 1–3 pictures of it (IP-Adapter) — for picture-book characters PhotoMaker can't keep. */
+function ArtForm({ refs, setRefs, act, error, onCreate }: {
+  refs: string[]; setRefs: (r: string[]) => void; act: Props["act"]; error: string | null;
+  onCreate: (f: { name: string; look: string; style: string }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [look, setLook] = useState("");
+  const [style, setStyle] = useState(ART_STYLE);
+  const [uploading, setUploading] = useState(false);
+  return (
+    <>
+      <p className="muted tight">
+        Upload 1–3 pictures of a cartoon character (front view on a plain background works best). Scenes that name the
+        character are drawn from these pictures, so the same character appears in every scene.
+      </p>
+      <div className="row tight-top character-new">
+        <label className="upload-button">
+          <input type="file" accept="image/*,.heic,.heif" multiple disabled={refs.length >= 3}
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []).slice(0, 3 - refs.length);
+              if (!files.length) return;
+              setUploading(true);
+              act(async () => {
+                try {
+                  const added = [];
+                  for (const f of files) added.push((await uploadImage(f)).path);
+                  setRefs([...refs, ...added]);
+                } finally {
+                  setUploading(false);
+                  e.target.value = "";
+                }
+              });
+            }} />
+          {uploading ? "Uploading…" : `+ Add pictures (${refs.length}/3)`}
+        </label>
+        {refs.map((r) => (
+          <button key={r} className="ref-thumb" title="Remove" onClick={() => setRefs(refs.filter((x) => x !== r))}>
+            <img className="face-preview" src={`/outputs/${r}`} alt="Reference" />
+          </button>
+        ))}
+      </div>
+      <div className="row">
+        <label>
+          Name
+          <input value={name} maxLength={40} placeholder="Ttori" onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="grow">
+          Look — colours, shape, clothes
+          <input value={look} maxLength={300} placeholder="a tiny baby dokkaebi with sky-blue skin, one yellow horn, tiger-striped vest" onChange={(e) => setLook(e.target.value)} />
+        </label>
+      </div>
+      <label className="style">
+        Drawing style
+        <input value={style} maxLength={300} onChange={(e) => setStyle(e.target.value)} />
+      </label>
+      <div className="row">
+        <div className="generate">
+          <button disabled={!refs.length || !name.trim()} onClick={() => { onCreate({ name: name.trim(), look, style }); setName(""); setLook(""); }}>
+            Create character
+          </button>
+          <span className="muted">makes a 4-picture character sheet · about 1 min</span>
+        </div>
+      </div>
+      <p className="muted">In My script, tick the character under <strong>Cartoon characters</strong> and write its name in the pictures where it appears.</p>
+      {error && <p className="error">{error}</p>}
     </>
   );
 }
@@ -138,7 +227,11 @@ function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; change
               {s.kind}
               {s.look ? ` · ${s.look}` : ""}
             </div>
-            <div className="muted">Use “{s.name}” in a Story Video scene, or pick {s.name} in Images.</div>
+            <div className="muted">
+              {s.kind === "art"
+                ? `Cartoon character from ${s.refs?.length ?? 1} picture(s). Tick ${s.name} under Cartoon characters in My script, or pick them in Images.`
+                : `Use “${s.name}” in a Story Video scene, or pick ${s.name} in Images.`}
+            </div>
           </div>
         </div>
         <span className={`state ${job.state}`}>{job.state === "done" ? "" : job.state}</span>
@@ -172,7 +265,8 @@ function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; change
               onClick={() =>
                 act(async () => {
                   const prompt = change.toLowerCase().includes(s.name.toLowerCase()) ? change : `${s.name} ${change}`;
-                  upsert(await createImages({ ...IMAGE_DEFAULTS, prompt, width: 512, height: 512, count: 2, style: "photorealistic, 35mm photo", character: job.id }));
+                  const style = s.kind === "art" ? s.style || ART_STYLE : "photorealistic, 35mm photo";
+                  upsert(await createImages({ ...IMAGE_DEFAULTS, prompt, width: 512, height: 512, count: 2, style, character: job.id }));
                   setChange("");
                 })
               }
@@ -181,7 +275,7 @@ function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; change
             </button>
           </div>
           <div className="suggestion-group quick">
-            {CHANGES.map((c) => (
+            {(s.kind === "art" ? ART_CHANGES : CHANGES).map((c) => (
               <button key={c} className="chip small" onClick={() => setChange(`${s.name} ${c}`)}>
                 {c}
               </button>

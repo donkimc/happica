@@ -1,5 +1,8 @@
 """Text → image via the SDXL-Turbo ComfyUI workflow.
 
+Characters: a real person's face via PhotoMaker, or a cartoon character from 1–3 pictures of it ("art"
+characters) via IP-Adapter Plus for SDXL (workflows/ipadapter_t2i.json), which carries its colours and shape.
+
 All of a job's scenes go into one ComfyUI run: a shared checkpoint loader feeding one
 branch per scene. ComfyUI runs with --cache-none (see scripts/start.sh), so separate runs
 would reload SDXL for every image.
@@ -13,6 +16,10 @@ from comfy_client import ComfyClient
 from config import OUTPUTS_DIR, WORKFLOWS_DIR
 
 WORKFLOW = json.loads((WORKFLOWS_DIR / "sdxl_turbo_t2i.json").read_text())
+IPADAPTER = json.loads((WORKFLOWS_DIR / "ipadapter_t2i.json").read_text())
+ART_WEIGHT = 0.7  # IP-Adapter strength: higher copies the reference pose too, lower drifts off-model
+ART_STEPS = 6  # like PhotoMaker, the extra conditioning needs a couple more turbo steps
+ART_START = 0.15  # the first steps follow only the prompt (layout, pose, setting), so the reference picture's pose and plain background don't take over
 NEGATIVE = "blurry, low quality, distorted, text, watermark"
 PER_SCENE = ("positive", "sampler", "decode", "save")  # duplicated per scene; the other nodes are shared
 
@@ -20,8 +27,27 @@ PER_SCENE = ("positive", "sampler", "decode", "save")  # duplicated per scene; t
 CHARACTER_STEPS = 6  # PhotoMaker needs a couple more turbo steps to settle the face
 
 
+def _art_nodes(wf: dict, key: str, refs: list[str], weight: float) -> None:
+    """Shared IP-Adapter loaders plus, for one art character, its reference pictures and its adapted model `apply_<key>`."""
+    if "ipa_loader" not in wf:
+        wf["ipa_loader"] = copy.deepcopy(IPADAPTER["ipa_loader"])
+        wf["clip_vision"] = copy.deepcopy(IPADAPTER["clip_vision"])
+    prev = None
+    for k, name in enumerate(refs):
+        wf[f"ref_{key}_{k}"] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        if prev is None:
+            prev = [f"ref_{key}_{k}", 0]
+        else:
+            wf[f"refs_{key}_{k}"] = {"class_type": "ImageBatch", "inputs": {"image1": prev, "image2": [f"ref_{key}_{k}", 0]}}
+            prev = [f"refs_{key}_{k}", 0]
+    apply = copy.deepcopy(IPADAPTER["apply"])
+    apply["inputs"].update(image=prev, weight=weight, start_at=ART_START)
+    wf[f"apply_{key}"] = apply
+
+
 def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], settings: dict,
-                    face: str | None = None, with_face: list[bool] | None = None) -> dict:
+                    face: str | None = None, with_face: list[bool] | None = None,
+                    art: list[str | None] | None = None, art_refs: dict[str, list[str]] | None = None) -> dict:
     """One branch per prompt. Branches flagged in `with_face` are conditioned on the uploaded face with PhotoMaker
     (their prompt must contain the trigger word "img" after the class word, e.g. "a woman img")."""
     base = copy.deepcopy(WORKFLOW)
@@ -35,6 +61,13 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
         wf["face"] = {"class_type": "LoadImage", "inputs": {"image": face}}
         wf["sigmas_face"] = copy.deepcopy(base["sigmas"])
         wf["sigmas_face"]["inputs"]["steps"] = CHARACTER_STEPS
+    art = art or [None] * len(prompts)
+    for key, refs in (art_refs or {}).items():
+        if key in art:
+            _art_nodes(wf, key, refs, float(settings.get("art_weight", ART_WEIGHT)))
+    if any(art):
+        wf["sigmas_art"] = copy.deepcopy(base["sigmas"])
+        wf["sigmas_art"]["inputs"]["steps"] = ART_STEPS
 
     style = settings.get("style", "").strip()
     for i, (prompt, seed, name) in enumerate(zip(prompts, seeds, names)):
@@ -50,6 +83,8 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
             branch[f"sampler_{i}"]["inputs"]["sigmas"] = ["sigmas_face", 0]
         else:
             branch[f"positive_{i}"]["inputs"]["text"] = text
+            if art[i]:  # this scene shows an art character: sample with its IP-Adapter model
+                branch[f"sampler_{i}"]["inputs"].update(model=[f"apply_{art[i]}", 0], sigmas=["sigmas_art", 0])
         branch[f"sampler_{i}"]["inputs"]["noise_seed"] = seed
         branch[f"save_{i}"]["inputs"]["filename_prefix"] = f"happica/{name}"
         wf.update(branch)
@@ -65,6 +100,7 @@ async def generate_batch(
     on_progress: Callable[[float], None] = lambda _: None,
     character: dict | None = None,
     with_face: list[bool] | None = None,
+    art: list[dict | None] | None = None,
 ) -> list[Path]:
     """Generate one image per prompt in a single ComfyUI run; progress runs 0 → 1 across all of them.
 
@@ -76,7 +112,13 @@ async def generate_batch(
     if character:
         face = await comfy.upload_image(OUTPUTS_DIR / character["photo"], f"character_{Path(character['photo']).name}")
         with_face = with_face if with_face is not None else [True] * n
-    wf = _batch_workflow(prompts, seeds, names, settings, face, with_face)
+    art_keys, art_refs = None, {}
+    if art and any(art):
+        art_keys = [a["id"] if a else None for a in art]
+        for a in {a["id"]: a for a in art if a}.values():
+            art_refs[a["id"]] = [await comfy.upload_image(_square(OUTPUTS_DIR / r), f"art_{a['id']}_{k}.png")
+                                 for k, r in enumerate(a["refs"])]
+    wf = _batch_workflow(prompts, seeds, names, settings, face, with_face, art_keys, art_refs)
 
     done: dict[int, float] = {}
 
@@ -97,5 +139,22 @@ async def generate_batch(
 
 
 async def generate(comfy: ComfyClient, prompt: str, settings: dict, out_path: Path, seed: int,
-                   on_progress: Callable[[float], None] = lambda _: None, character: dict | None = None) -> Path:
-    return (await generate_batch(comfy, [prompt], settings, [out_path], [seed], on_progress, character))[0]
+                   on_progress: Callable[[float], None] = lambda _: None, character: dict | None = None,
+                   art: dict | None = None) -> Path:
+    return (await generate_batch(comfy, [prompt], settings, [out_path], [seed], on_progress, character,
+                                 art=[art] if art else None))[0]
+
+
+def _square(path: Path) -> Path:
+    """A reference picture padded (not cropped) to a 512 px square on white, so IP-Adapter's centre crop keeps
+    the whole character and several references batch together."""
+    from PIL import Image, ImageOps
+
+    out = path.with_name(f"{path.stem}_sq512.png")
+    if not out.is_file():
+        with Image.open(path) as img:
+            img = img.convert("RGBA")
+            flat = Image.new("RGB", img.size, "white")
+            flat.paste(img, mask=img.split()[3])
+            ImageOps.pad(flat, (512, 512), color="white").save(out)
+    return out

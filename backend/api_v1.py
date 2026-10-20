@@ -75,6 +75,8 @@ def _files(job: dict) -> list[dict]:
     out: list[tuple[str, str]] = []
     if r.get("video"):
         out.append(("video", r["video"]))
+        if (job.get("settings") or {}).get("story"):
+            out.append(("final", r["video"]))  # a story's finished 9:16 export
     for t in r.get("tracks") or []:
         out.append(("audio", t["mp3"]))
         if t.get("flac"):
@@ -87,6 +89,10 @@ def _files(job: dict) -> list[dict]:
     out += [(role, p) for p in r.get("images") or []]
     if (r.get("music") or {}).get("mp3"):
         out.append(("music", r["music"]["mp3"]))
+    if r.get("cover"):
+        out.append(("cover", r["cover"]))
+    if r.get("caption"):
+        out.append(("caption", r["caption"]))
     if (r.get("ambience") or {}).get("mp3"):
         out.append(("ambience", r["ambience"]["mp3"]))
     out += [("scene_sfx", c["mp3"]) for scene in r.get("sfx") or [] for c in scene if c.get("mp3")]
@@ -258,6 +264,112 @@ async def create_upscale(req: UpscaleRequest, request: Request):
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
 MAX_VIDEO_UPLOAD = 1024 * 1024 * 1024
+
+
+class StoryScene(BaseModel):
+    image: str = Field(min_length=2, max_length=1000, description="English picture description (image_prompt)")
+    narration: str = Field(default="", max_length=600, description="Spoken exactly as written; empty = no narration")
+    sfx: str | list[main.SfxCue] = Field(default_factory=list, description="A sound description, or a list of cues")
+    motion: str = Field(default="", max_length=300, description="What moves (AI motion)")
+    motion_mode: str | None = Field(default=None, pattern="^(kenburns|ltx|none)$")
+
+
+class StorySong(main.SongSpec):
+    """The story's song: a new one (the spec fields), or `track` from the Music library."""
+    tags: str = Field(default="", max_length=500)
+    track: str = Field(default="", description="Use this Music library take instead of making a song")
+    instrumental: bool = False
+    placement: str | None = Field(default=None, pattern="^(bed|intro_outro|sung_story)$",
+                                  description="Default: intro_outro for a song with lyrics, bed for an instrumental")
+    volume: float = Field(default=0.5, ge=0, le=1)
+    lyrics_subtitles: bool = True
+
+
+class StoryRequest(BaseModel):
+    """A whole story in one call (the story-file format): song, pictures, narration, sound effects, video and
+    the final 9:16 export, plus cover.png and caption.txt."""
+    id: str = Field(default="", max_length=80, description="Your story id (kept in the job settings)")
+    title: str = Field(min_length=1, max_length=200)
+    style: str = Field(default="", max_length=500)
+    characters: dict[str, str] = Field(default_factory=dict, max_length=12, description="Name → look")
+    art_characters: list[str] = Field(default_factory=list, max_length=4, description="Cartoon character ids (reference art)")
+    voice: str = Field(default="st-ko-F1", pattern=main.tts.VOICE_ID)
+    motion: str = Field(default="kenburns", pattern="^(kenburns|ltx|none)$")
+    scenes: list[StoryScene] = Field(min_length=1, max_length=16)
+    song: StorySong | None = None
+    width: int = Field(default=576, ge=256, le=1024, multiple_of=64)
+    height: int = Field(default=1024, ge=256, le=1024, multiple_of=64)
+    output_height: int | None = Field(default=1920, ge=256, le=2160)
+    upscale: str = Field(default="fast", pattern="^(fast|ai)$")
+    clip_seconds: float = Field(default=3, ge=1, le=10)
+    fade: float = Field(default=0.5, ge=0, le=2)
+    music_volume: float = Field(default=0.35, ge=0, le=1, description="The song's instrumental / bed under the narration")
+    subtitles: str = Field(default="burn", pattern="^(off|soft|burn)$")
+    caption_style: main.CaptionStyle | None = None
+    hashtags: list[str] = Field(default_factory=list, max_length=30)
+    caption: str = Field(default="", max_length=2000, description="Text for caption.txt, between the title and hashtags")
+    seed: int | None = None
+    webhook_url: str | None = WEBHOOK
+
+
+def _story_settings(story: StoryRequest, song_track: str = "") -> main.JobRequest:
+    """A story file → a script-mode video job."""
+    script = [main.ScriptScene(image_prompt=sc.image, narration=sc.narration, motion=sc.motion, motion_mode=sc.motion_mode,
+                               sfx=[main.SfxCue(prompt=sc.sfx)] if isinstance(sc.sfx, str) and len(sc.sfx.strip()) >= 2
+                               else [] if isinstance(sc.sfx, str) else sc.sfx)
+              for sc in story.scenes]
+    song = None
+    if story.song:
+        s = story.song
+        lyrics = "" if s.instrumental else s.lyrics
+        placement = s.placement or ("intro_outro" if lyrics.strip() else "bed")
+        track = song_track or s.track
+        spec = None if track else main.SongSpec(**{**s.model_dump(include=set(main.SongSpec.model_fields)), "lyrics": lyrics,
+                                                   "tags": s.tags or "children's song"})
+        song = main.SongBlock(track=track, spec=spec, placement=placement, volume=s.volume, lyrics_subtitles=s.lyrics_subtitles)
+    req = main.JobRequest(
+        prompt=story.title, scene_mode="script", script=script, characters=story.characters,
+        art_characters=story.art_characters, style=story.style, voice=story.voice, motion=story.motion,
+        narrate=any(sc.narration.strip() for sc in story.scenes), subtitles=story.subtitles, width=story.width,
+        height=story.height, output_height=story.output_height, upscale=story.upscale, clip_seconds=story.clip_seconds,
+        fade=story.fade, music_volume=story.music_volume, caption_style=story.caption_style, seed=story.seed, song=song)
+    return req
+
+
+async def _create_story(story: StoryRequest, request: Request, song_track: str = "") -> dict:
+    meta = {"id": story.id, "title": story.title, "hashtags": story.hashtags, "caption": story.caption}
+    job = main.submit_video(_story_settings(story, song_track), {"story": meta, "webhook_url": story.webhook_url})
+    return _submit(job, request)
+
+
+@router.post("/stories", status_code=202,
+             summary="A whole story video in one call: song, pictures, narration, sound effects, 9:16 export, cover")
+async def create_story(story: StoryRequest, request: Request):
+    return await _create_story(story, request)
+
+
+class StoryBatch(BaseModel):
+    stories: list[StoryRequest] = Field(min_length=1, max_length=20)
+    song_reuse: bool = Field(default=False, description="Make the first story's song once and use it in every story")
+
+
+@router.post("/stories/batch", status_code=202, summary="Queue several stories in order; returns their jobs")
+async def create_story_batch(batch: StoryBatch, request: Request):
+    song_track, jobs = "", []
+    first = batch.stories[0].song
+    if batch.song_reuse and first and not first.track:
+        spec = main.MusicRequest(**{**first.model_dump(include=set(main.MusicRequest.model_fields)),
+                                    "tags": first.tags or "children's song", "variations": 1})
+        song_job = await main.create_music(spec)
+        jobs.append(public(song_job, _base_url(request)))
+        song_track = f"{song_job['id']}/v1.flac"  # ready by the time the stories (queued after it) need it
+    elif batch.song_reuse and first:
+        song_track = first.track
+    for story in batch.stories:
+        if song_track and not story.song:  # with song_reuse, a story without its own song block shares the first one's
+            story = story.model_copy(update={"song": first})
+        jobs.append(await _create_story(story, request, song_track))
+    return {"jobs": jobs, "ids": [j["id"] for j in jobs]}
 
 
 @router.post("/uploads", summary="Upload a picture (for slides, characters or upscaling) or a video (for upscaling); returns its path")

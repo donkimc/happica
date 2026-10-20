@@ -6,6 +6,7 @@ its voiceover, and subtitles are timed to the speech. Background music is either
 story (auto) or taken from the Music Studio library, and ducked under the narration.
 """
 import asyncio
+import json
 import math
 import random
 import shutil
@@ -14,7 +15,7 @@ from pathlib import Path
 from comfy_client import ComfyClient
 from config import OUTPUTS_DIR
 
-from . import assemble, captions, character, image, music, scenes, script, sfx, songwriter, tts, video, vision
+from . import assemble, captions, character, ffmpeg, image, lyrics_align, music, scenes, script, sfx, song, songwriter, story, tts, upscale, video, vision
 
 LEAD = 0.35  # narration starts this long after its scene appears
 TAIL = 0.4   # breathing room after the narration before the next scene's crossfade
@@ -70,6 +71,22 @@ async def _music_video_scenes(settings: dict) -> tuple[list[dict], float]:
         if k:
             shot["prompt"] += ", " + SHOT_VARIANTS[(k - 1) % len(SHOT_VARIANTS)]
     return shots, seconds
+
+
+async def _music_video_lyrics(settings: dict, report) -> dict | None:
+    """Timed lyrics for a music video's song, burned as sung-lyric subtitles."""
+    from jobs import JobStore
+
+    track = settings["song_track"]
+    music_job = JobStore().get(track.split("/")[0])
+    s = music_job["settings"] if music_job else {}
+    if s.get("instrumental") or not s.get("lyrics", "").strip():
+        return None
+    report("timing the lyrics", 0.0)
+    info = {"placement": "musicvideo", "track": track, "lyrics_subtitles": True,
+            "timing": await lyrics_align.timing(OUTPUTS_DIR / track, s["lyrics"], s.get("language", "en"))}
+    info["lyric_cues"] = song.full_song_cues(info)
+    return info
 
 
 SHOT_VARIANTS = ["extreme close-up", "wide establishing shot", "low angle shot", "overhead view", "silhouette against the light"]
@@ -128,6 +145,12 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
                   motion=[s["motion"] for s in shots])
     report("scenes", 1.0, result=result)
 
+    # A sung song comes first: its lyric timing can decide how long scenes last
+    if settings.get("song"):
+        result["song"] = await song.prepare(job, job_dir, report, music_comfy)
+    elif settings.get("scene_mode") == "musicvideo" and settings.get("subtitles", "off") != "off":
+        result["song"] = await _music_video_lyrics(settings, report)
+
     # Narration first: its length decides how long each scene lasts
     speech = [0.0] * len(shots)
     if settings.get("narrate"):
@@ -142,6 +165,15 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
     if song_seconds:  # cut the visuals to the song: n scenes overlapping by `fade` add up to its exact length
         n = len(shots)
         result["durations"] = [round((song_seconds + (n - 1) * fade) / n, 3)] * n
+    placement = (result.get("song") or {}).get("placement")
+    if placement == "sung_story":
+        result["durations"] = song.sung_durations(result["song"], len(shots), fade)
+        result["song"]["lyric_cues"] = song.full_song_cues(result["song"])
+    elif placement == "intro_outro":
+        layout = song.intro_outro(result["song"], [bool(x) for x in speech], result["durations"], fade, LEAD,
+                                  level(settings, "music_volume", 0.3, bool(settings.get("narrate"))))
+        result.update(durations=layout.pop("durations"), leads=layout.pop("leads"))
+        result["song"].update(layout)
 
     # One base seed per job keeps a similar look across scenes; every scene's seed is saved so it can be reproduced.
     seed = settings.get("seed")
@@ -156,7 +188,11 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
         for sl, out in zip(settings["slides"], image_paths):
             await asyncio.to_thread(_fit_image, OUTPUTS_DIR / sl["image"], out, settings["width"], settings["height"])
     else:
-        prompts = [script.expand(s["prompt"], settings.get("characters")) for s in shots]
+        art_chars = [a for a in (character.load(i) for i in settings.get("art_characters") or []) if a]
+        looks = {**{a["name"]: a.get("look", "") for a in art_chars}, **(settings.get("characters") or {})}
+        prompts = [script.expand(s["prompt"], looks) for s in shots]
+        art = [character.find_art(p, art_chars) for p in prompts]
+        result["art"] = [a["id"] if a else None for a in art]
         ch = character.load(settings.get("character", ""))
         with_face = None
         if ch:
@@ -166,8 +202,10 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
                 with_face = [True] * len(prompts)
             prompts = [character.prompt_for(p, ch) if f else p for p, f in zip(prompts, with_face)]
             result["with_face"] = with_face
+        if with_face:  # a scene with the real person's face can't also use an art character
+            art = [None if f else a for a, f in zip(art, with_face)]
         await image.generate_batch(comfy, prompts, settings, image_paths, seeds,
-                                   on_progress=lambda p: report("image", p), character=ch, with_face=with_face)
+                                   on_progress=lambda p: report("image", p), character=ch, with_face=with_face, art=art)
     result.update(images=[_rel(job_dir, p) for p in image_paths], seeds=seeds)
     report("image", 1.0, result=result)
 
@@ -200,7 +238,7 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
     result["music"] = await _pick_music(job, job_dir, result, report, music_comfy)
     result["ambience"] = await _pick_ambience(job, job_dir, result, report, music_comfy)
     report("assemble", 0.0)
-    result.update(await _assemble(job_dir, settings, result))
+    result.update(await _assemble(job_dir, settings, result, report))
     return result
 
 
@@ -231,7 +269,7 @@ async def change_scene_sfx(job: dict, job_dir: Path, report, music_comfy: ComfyC
     await make_sfx(job_dir, result, report, music_comfy)
     if result.get("video"):
         report("assemble", 0.0)
-        result.update(await _assemble(job_dir, job["settings"], result))
+        result.update(await _assemble(job_dir, job["settings"], result, report))
     return result
 
 
@@ -252,10 +290,12 @@ async def regenerate_scene(job: dict, job_dir: Path, report, comfy: ComfyClient,
     p = _paths(job_dir, index)
     ch = character.load(settings.get("character", ""))
     face = bool(ch) and (result.get("with_face") or [True] * len(prompts))[index]
-    text = script.expand(prompts[index], settings.get("characters"))
+    art_chars = [a for a in (character.load(i) for i in settings.get("art_characters") or []) if a]
+    text = script.expand(prompts[index], {**{a["name"]: a.get("look", "") for a in art_chars}, **(settings.get("characters") or {})})
+    art = None if face else character.find_art(text, art_chars)
     await image.generate(comfy, character.prompt_for(text, ch) if face else text, settings,
                          p["image"], seed=seeds[index], on_progress=lambda prog: report(f"scene {index + 1} image", prog),
-                         character=ch if face else None)
+                         character=ch if face else None, art=art)
 
     # Only rebuild video if this job made one (an "images only" job or one that failed before video stays as is)
     if result.get("video"):
@@ -269,7 +309,7 @@ async def regenerate_scene(job: dict, job_dir: Path, report, comfy: ComfyClient,
                             p["clip"], index, seconds=durations[index], seed=seeds[index],
                             on_progress=lambda prog: report(f"scene {index + 1} clip", prog))
         report("assemble", 0.0)
-        result.update(await _assemble(job_dir, settings, result))
+        result.update(await _assemble(job_dir, settings, result, report))
     return result
 
 
@@ -282,7 +322,7 @@ async def change_sound(job: dict, job_dir: Path, report, music_comfy: ComfyClien
     if "ambience" in regenerate:
         result["ambience"] = await _pick_ambience(job, job_dir, result, report, music_comfy)
     report("assemble", 0.0)
-    result.update(await _assemble(job_dir, job["settings"], result))
+    result.update(await _assemble(job_dir, job["settings"], result, report))
     return result
 
 
@@ -352,39 +392,92 @@ def level(settings: dict, key: str, default: float, narrated: bool) -> float:
     return value if narrated else min(1.0, value * 2.5)
 
 
-async def _assemble(job_dir: Path, settings: dict, result: dict) -> dict:
+def output_size(settings: dict) -> tuple[int, int]:
+    """The final video's size: the generation size, or scaled up to output_height (e.g. 576×1024 → 1080×1920)."""
+    w, h = settings["width"], settings["height"]
+    if not settings.get("output_height") or settings["output_height"] <= h:
+        return w, h
+    f = settings["output_height"] / h
+    return int(round(w * f / 2)) * 2, int(round(h * f / 2)) * 2
+
+
+async def _picture(job_dir: Path, settings: dict, clips: list[Path], durations: list[float], fade: float,
+                   report) -> tuple[Path, tuple[int, int]]:
+    """The joined clips without sound, at the final size. Cached by what it's made of, so changing the sound or a
+    sound effect re-mixes without joining (or upscaling, which with AI takes ~1 s a frame) again."""
+    import hashlib
+
+    size = output_size(settings)
+    method = settings.get("upscale", "fast")
+    key = hashlib.sha1(json.dumps([[str(c), c.stat().st_mtime] for c in clips] + [durations, fade, size, method]).encode()).hexdigest()[:16]
+    out = job_dir / "video_only.mp4"
+    stamp = job_dir / "video_only.key"
+    if out.is_file() and stamp.is_file() and stamp.read_text() == key:
+        return out, size
+    joined = await assemble.concat(clips, durations, job_dir / "video_joined.mp4", fade)
+    if size == (settings["width"], settings["height"]):
+        joined.replace(out)
+    elif method == "ai":
+        report("upscaling (AI)", 0.0)
+        await upscale._ai(joined, out, *size, True, lambda p: report("upscaling (AI)", p), lambda: False)
+        joined.unlink()
+    else:
+        await ffmpeg.run("-i", str(joined), "-vf", f"scale={size[0]}:{size[1]}:flags=lanczos", *ffmpeg.ENCODE, str(out))
+        joined.unlink()
+    stamp.write_text(key)
+    return out, size
+
+
+async def _assemble(job_dir: Path, settings: dict, result: dict, report=lambda *a, **k: None) -> dict:
     n = len(result["scenes"])
     fade = settings.get("fade", 0.5)
     durations = result.get("durations") or [settings.get("clip_seconds", 3)] * n
     clips = [_paths(job_dir, i)["clip"] for i in range(n)]
-    silent = await assemble.concat(clips, durations, job_dir / "video_only.mp4", fade)
+    silent, size = await _picture(job_dir, settings, clips, durations, fade, report)
     total = _total(settings, result)
 
     narration_track, cues, speech = None, [], []
     starts = assemble.scene_starts(durations, fade)
+    talk = [s + lead for s, lead in zip(starts, result.get("leads") or [LEAD] * n)]  # when each narration begins
     if result.get("audio"):
         audio = [p if (p := _paths(job_dir, i)["audio"]).is_file() else None for i in range(n)]
-        narration_track = assemble.mix_narration(audio, starts, LEAD, total, job_dir / "narration.wav")
-        speech = [(starts[i] + LEAD, starts[i] + LEAD + result["speech"][i]) for i in range(n) if result["speech"][i]]
+        narration_track = assemble.mix_narration(audio, talk, 0.0, total, job_dir / "narration.wav")
+        speech = [(talk[i], talk[i] + result["speech"][i]) for i in range(n) if result["speech"][i]]
         if settings.get("subtitles", "off") != "off":
             for i, line in enumerate(result["narration"]):
-                cues += captions.cues_for(line, starts[i] + LEAD, result["speech"][i], captions.max_chars_for(settings["width"]))
+                cues += captions.cues_for(line, talk[i], result["speech"][i], captions.max_chars_for(settings["width"]),
+                                          lines=2 if settings["height"] > settings["width"] else 1)
 
     narrated = bool(narration_track)
-    beds = []
+    beds, segments = [], []
+    sung = result.get("song") or {}
+    if sung.get("placement") == "bed":
+        beds.append((OUTPUTS_DIR / sung["track"], level(settings, "music_volume", 0.3, narrated)))
+    elif sung.get("placement") == "sung_story":
+        beds.append((OUTPUTS_DIR / sung["track"], sung.get("volume", 0.5)))
+    elif sung.get("placement") == "intro_outro":
+        segments = [{**seg, "path": OUTPUTS_DIR / seg["path"]} for seg in sung["segments"]]
+    if sung.get("lyrics_subtitles") and settings.get("subtitles", "off") != "off":
+        cues += [captions.Cue(c["start"], c["end"], c["text"], "lyric") for c in sung.get("lyric_cues") or []]
+        cues.sort(key=lambda c: c.start)
     if result.get("music") and settings.get("music", "off") != "off":
         beds.append((OUTPUTS_DIR / result["music"]["track"], level(settings, "music_volume", 0.3, narrated)))
     if result.get("ambience") and settings.get("ambience", "off") != "off":
         beds.append((OUTPUTS_DIR / result["ambience"]["track"], level(settings, "ambience_volume", 0.35, narrated)))
     final = await assemble.finalize(silent, job_dir / "final.mp4", total, narration_track, cues,
                                     burn=settings.get("subtitles") == "burn" and captions.can_burn(cues),
-                                    size=(settings["width"], settings["height"]), beds=beds, speech=speech,
+                                    size=size, beds=beds, speech=speech,
+                                    segments=segments, caption_style=settings.get("caption_style"),
                                     sfx=[(OUTPUTS_DIR / c["flac"], starts[i] + c["at"], c["duration"], c["volume"])
                                          for i, scene in enumerate(result.get("sfx") or []) for c in scene
                                          if c.get("flac")])
-    silent.unlink()
-    if not cues:
-        return {"video": _rel(job_dir, final), "subtitles": None, "subtitles_vtt": None}
-    vtt = captions.write_vtt(cues, final.with_suffix(".vtt"))
-    return {"video": _rel(job_dir, final), "subtitles": _rel(job_dir, final.with_suffix(".srt")),
-            "subtitles_vtt": _rel(job_dir, vtt)}
+    out = {"video": _rel(job_dir, final), "subtitles": None, "subtitles_vtt": None}
+    if cues:
+        vtt = captions.write_vtt(cues, final.with_suffix(".vtt"))
+        out.update(subtitles=_rel(job_dir, final.with_suffix(".srt")), subtitles_vtt=_rel(job_dir, vtt))
+    if meta := settings.get("story"):  # one-call story: a thumbnail and a ready-to-paste caption
+        cover = story.make_cover(_paths(job_dir, 0)["image"], meta.get("title", ""), size, job_dir / "cover.png")
+        text = story.write_caption(meta.get("title", ""), meta.get("caption", ""), meta.get("hashtags") or [],
+                                   job_dir / "caption.txt")
+        out.update(cover=_rel(job_dir, cover), caption=_rel(job_dir, text))
+    return out

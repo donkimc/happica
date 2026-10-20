@@ -55,6 +55,7 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
   }, []);
 
   const set = (patch: Partial<JobSettings>) => onSettings({ ...settings, ...patch });
+  const realCharacters = characters.filter((c) => c.settings.kind !== "art"); // PhotoMaker faces; cartoons are picked in My script
   const pictures = !musicVideo && settings.scene_mode === "slides";
   const aiNarration = pictures && settings.narrate && settings.slides_narration === "ai";
   const llm = !pictures && !musicVideo && settings.scene_mode === "llm";
@@ -155,7 +156,10 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
       </div>
       )}
 
-      {scripted && <ScriptEditor title={prompt} settings={settings} onTitle={onPrompt} onSettings={set} />}
+      {scripted && (
+        <ScriptEditor title={prompt} settings={settings} onTitle={onPrompt} onSettings={set} library={library}
+                      artCharacters={characters.filter((c) => c.settings.kind === "art")} />
+      )}
 
       {pictures && onSlides && (
         <>
@@ -217,13 +221,13 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
       </label>
       )}
 
-      {!pictures && !musicVideo && characters.length > 0 && (
+      {!pictures && !musicVideo && realCharacters.length > 0 && (
         <div className="row">
           <label>
             Main character
             <select value={settings.character ?? ""} onChange={(e) => set({ character: e.target.value })}>
               <option value="">None</option>
-              {characters.map((c) => (
+              {realCharacters.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.settings.name as string}
                 </option>

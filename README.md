@@ -83,6 +83,22 @@ curl -L -o models/upscale_models/RealESRGAN_x4plus.pth https://github.com/xinnta
 curl -L -o models/upscale_models/realesr-general-x4v3.pth https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-general-x4v3.pth
 ```
 
+Cartoon characters from reference art (IP-Adapter Plus for SDXL + its CLIP-ViT-H image encoder, 3.4 GB; `scripts/setup.sh` installs the `ComfyUI_IPAdapter_plus` nodes):
+
+```bash
+curl -L -o models/ipadapter/ip-adapter-plus_sdxl_vit-h.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors
+curl -L -o models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors
+```
+
+Sung songs in videos — vocal/instrumental separation (Demucs `htdemucs`) and lyric timing (Whisper large-v3-turbo on MLX) — run in their own venv, `engine/audio-tools/.venv`, which `scripts/setup.sh` creates. The models download on first use (~80 MB + 1.6 GB), or ahead of time:
+
+```bash
+engine/audio-tools/.venv/bin/python -c "from demucs.pretrained import get_model; get_model('htdemucs')"
+engine/audio-tools/.venv/bin/python -c "from huggingface_hub import snapshot_download as s; s('mlx-community/whisper-large-v3-turbo')"
+```
+
+Rounded Korean caption fonts (Jua, Gamja Flower) are in `fonts/` under the SIL Open Font License.
+
 Story mode needs [Ollama](https://ollama.com) running with a small model:
 
 ```bash
@@ -112,6 +128,11 @@ Other apps automate Happica through `/api/v1` with an API key (create and revoke
 | `POST /videos` · `/images` · `/music` · `/music/draft` · `/sfx` · `/voiceovers` · `/characters` | Start a job (202 + job); optional `webhook_url` |
 | `POST /videos` with `scene_mode: "script"` | Scenes written outside Happica: `script: [{image_prompt, narration, motion, motion_mode, sfx: [{prompt, at, duration, volume}]}]` (≤16), `characters: {name: look}`. No story AI; narration spoken as written; per-scene motion (kenburns/ltx/none) |
 | `POST /jobs/{id}/scenes/{i}/regenerate` · `/scenes/{i}/sfx/{k}/regenerate` | Redo one scene's picture, or one sound effect, and rebuild the video |
+| `song` on `POST /videos` | A sung song: `{track \| spec, placement: bed \| intro_outro \| sung_story, volume, lyrics_subtitles}`. `spec` makes a new song (title, tags, lyrics, bpm, keyscale, language, duration). Lyrics are timed with Demucs + Whisper and burned in yellow; `lyrics_timing` is saved on the music job |
+| `caption_style`, `output_height`, `upscale` on `POST /videos` | Caption font (`rounded` Jua, `handwritten` Gamja Flower, `system`), size, colour, `bottom`/`lower_third`, box; export e.g. 576×1024 → `output_height: 1920` with `fast` or `ai` upscaling |
+| `art_characters` on `POST /videos`, `kind: "art"` on `POST /characters` | Cartoon characters from 1–3 reference pictures (`refs`) via IP-Adapter; scenes that name one are drawn from its pictures |
+| `POST /stories` | **A whole story video in one call** — the story-file format (`title`, `style`, `characters`, `voice`, `motion`, `scenes: [{image, narration, sfx}]`, `song`, `hashtags`, `caption`). Song, pictures, narration, SFX, video and the 1080×1920 export run as one job; files include `final`, `cover` (cover.png, first scene + title) and `caption` (caption.txt) |
+| `POST /stories/batch` | Up to 20 stories, queued in order; `song_reuse: true` makes the first story's song once and uses it in all |
 | `POST /combine` | **API only.** Join finished videos, or finished audio (music, sfx, voiceovers), into one long file: `items: [{job, take}]`, `target_seconds` (repeat up to 4 h, e.g. 3600), `order` sequence/shuffle, `fade_in`/`fade_out`, `width`/`height` for video |
 | `POST /upscale` | **API only.** Make a finished video/image/character job (`job`) or an upload (`path`) bigger: `target_height` (e.g. 1080, 2160) or `scale` (1.5–4), `method` `ai` (Real-ESRGAN) or `fast` (resize) |
 | `POST /uploads` | Upload a picture (multipart `file`) for slides, characters or upscaling, or a video (MP4/MOV/WebM/MKV, up to 1 GB) for upscaling |
@@ -145,7 +166,11 @@ Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves th
 | AI motion clip (LTX-Video, 3 s at 768×512) | ~6.5 min |
 | Song, 2 takes (ACE-Step 1.5) | ~2 min for 30 s, ~3 min for 1 min |
 | Sound effect, 2 takes (Stable Audio 3 small SFX) | ~5 s for 10 s, ~15 s for 45 s (+~8 s with AI detail) |
-| Scene sound effects (all of a video's cues in one run) | ~3 s per cue + ~5 s to load; cached, so re-mixing is free |
+| Scene sound effects (all of a video's cues in one run) | 9 cues in ~22 s; cached, so re-mixing is free |
+| Sung song prep (once per song, then cached) | Demucs stems ~43 s (CPU — htdemucs exceeds an MPS limit) + Whisper large-v3-turbo ~20 s for a 70 s song; alignment < 0.1 s |
+| Cartoon character (IP-Adapter Plus) | ~+40 s per job to load CLIP-ViT-H + adapter, images ~2× slower (3 scenes: ~140 s vs 71 s); image ComfyUI peaks ~5 GB vs ~2 GB |
+| 1080×1920 export | `fast`: part of the ~80 s assembly of a 1.5-min video; `ai`: ~1 s per frame |
+| **One-call story** (`POST /stories`: new 70 s sung song as intro/outro, 9 scenes, 7 narrated, 9 SFX, pan & zoom, 1080×1920) | **~7.5 min**: song + stems + lyrics 2 min 53 s, narration 42 s, images 2 min, clips 13 s, SFX 22 s, assembly + export 82 s |
 | Combine into 1 hour (API) | ~6 s for video (clips are joined without re-encoding), ~35 s for audio |
 | AI upscale (Real-ESRGAN, API) | ~25 s per 768×512 image; video ~0.8 s per frame (a 30 s clip ≈ 10 min). `fast` resize: seconds |
 

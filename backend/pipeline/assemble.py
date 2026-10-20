@@ -56,10 +56,12 @@ async def finalize(video: Path, out: Path, total: float, narration: Path | None 
                    cues: list[captions.Cue] | None = None, burn: bool = False,
                    size: tuple[int, int] = (768, 512), beds: list[tuple[Path, float]] | None = None,
                    sfx: list[tuple[Path, float, float, float]] | None = None,
-                   speech: list[tuple[float, float]] | None = None) -> Path:
+                   speech: list[tuple[float, float]] | None = None, segments: list[dict] | None = None,
+                   caption_style: dict | None = None) -> Path:
     """Add narration, background beds (music, ambience — each looped to length at its own gain, and ducked
     together under the narration), sound effects (path, start, length, gain — placed at their time; `speech` is
-    when the narration talks, where they play 6 dB lower) and subtitles.
+    when the narration talks, where they play 6 dB lower), song segments (a stretch of a file — src, length — placed
+    at dst; `duck` ones go under the narration with the music, the others play at their own level) and subtitles.
 
     Subtitles go in as a soft track, and are also burned into the picture when `burn`.
     """
@@ -73,16 +75,28 @@ async def finalize(video: Path, out: Path, total: float, narration: Path | None 
         args += ["-i", str(narration)]
         voice, n_inputs = f"{n_inputs}:a", n_inputs + 1
     stereo = "aformat=sample_rates=48000:channel_layouts=stereo"
+    music_in, loose = [], []
     for k, (bed, gain) in enumerate(beds or []):
         args += ["-stream_loop", "-1", "-i", str(bed)]  # loop a short track under a long video
         graph.append(f"[{n_inputs}:a]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,{stereo},volume={gain:.3f},"
                      f"afade=t=in:d=1,afade=t=out:st={max(0.0, total - 2):.3f}:d=2[bed{k}]")
+        music_in.append(f"[bed{k}]")
         n_inputs += 1
-    if beds:
-        if len(beds) > 1:
-            graph.append("".join(f"[bed{k}]" for k in range(len(beds))) + f"amix=inputs={len(beds)}:normalize=0[music]")
-        else:
-            graph[-1] = graph[-1].replace("[bed0]", "[music]")
+    for k, seg in enumerate(segments or []):
+        if seg["length"] <= 0:
+            continue
+        if seg.get("loop"):
+            args += ["-stream_loop", "-1"]
+        args += ["-i", str(seg["path"])]
+        ms, length = max(0, round(seg["dst"] * 1000)), seg["length"]
+        graph.append(f"[{n_inputs}:a]atrim=start={seg['src']:.3f}:end={seg['src'] + length:.3f},asetpts=PTS-STARTPTS,{stereo},"
+                     f"volume={seg['gain']:.3f},afade=t=in:d={seg['fade_in']:.2f},"
+                     f"afade=t=out:st={max(0.0, length - seg['fade_out']):.3f}:d={seg['fade_out']:.2f},adelay={ms}|{ms}[seg{k}]")
+        (music_in if seg.get("duck") else loose).append(f"[seg{k}]")
+        n_inputs += 1
+    if music_in:
+        graph.append("".join(music_in) + (f"amix=inputs={len(music_in)}:normalize=0:duration=longest" if len(music_in) > 1
+                                          else "anull") + "[music]")
         if narration:
             # Duck: the music drops whenever the narration speaks, then comes back up between lines
             graph.append(f"[{voice}]{stereo},asplit=2[voice][key]")
@@ -90,11 +104,12 @@ async def finalize(video: Path, out: Path, total: float, narration: Path | None 
             layers = ["[voice]", "[ducked]"]
         else:
             layers = ["[music]"]
-    elif narration and sfx:
+    elif narration and (sfx or loose):
         graph.append(f"[{voice}]{stereo}[voice]")
         layers = ["[voice]"]
     else:
         layers = []
+    layers += loose
 
     if sfx:
         # Sound-effect bus: each cue at its own time, NOT ducked like the music, but ~-6 dB while someone speaks
@@ -110,7 +125,7 @@ async def finalize(video: Path, out: Path, total: float, narration: Path | None 
         graph.append(f"[fxmix]volume='if({talking},0.5,1)':eval=frame[fxbus]" if talking else "[fxmix]anull[fxbus]")
         layers.append("[fxbus]")
 
-    if narration and not beds and not sfx:
+    if narration and not music_in and not loose and not sfx:
         audio_out = voice  # narration alone: as is
     elif layers:
         graph.append("".join(layers) + (f"amix=inputs={len(layers)}:normalize=0:duration=longest," if len(layers) > 1 else "")
@@ -122,7 +137,7 @@ async def finalize(video: Path, out: Path, total: float, narration: Path | None 
         work = out.parent / "captions"
         prev = "[0:v]"
         for k, cue in enumerate(cues):
-            png = captions.render_png(cue.text, *size, work / f"cue_{k:03d}.png")
+            png = captions.render_png(cue.text, *size, work / f"cue_{k:03d}.png", caption_style, cue.style)
             args += ["-i", str(png)]
             label = f"[c{k}]"
             graph.append(f"{prev}[{n_inputs}:v]overlay=enable='between(t,{cue.start:.3f},{cue.end:.3f})'{label}")

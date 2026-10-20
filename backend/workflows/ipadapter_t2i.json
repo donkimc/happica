@@ -1,0 +1,10 @@
+{
+  "ipa_loader": {"class_type": "IPAdapterModelLoader", "inputs": {"ipadapter_file": "ip-adapter-plus_sdxl_vit-h.safetensors"}},
+  "clip_vision": {"class_type": "CLIPVisionLoader", "inputs": {"clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"}},
+  "ref": {"class_type": "LoadImage", "inputs": {"image": ""}},
+  "refs": {"class_type": "ImageBatch", "inputs": {"image1": ["ref", 0], "image2": ["ref", 0]}},
+  "apply": {"class_type": "IPAdapterAdvanced", "inputs": {
+    "model": ["ckpt", 0], "ipadapter": ["ipa_loader", 0], "image": ["ref", 0], "clip_vision": ["clip_vision", 0],
+    "weight": 0.7, "weight_type": "linear", "combine_embeds": "average", "start_at": 0.0, "end_at": 1.0,
+    "embeds_scaling": "V only"}}
+}

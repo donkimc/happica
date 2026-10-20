@@ -40,6 +40,22 @@ export interface ScriptScene {
   motion_mode?: "kenburns" | "ltx" | "none" | null;
 }
 
+export interface SongBlock {
+  track: string; // a Music library take (.flac)
+  placement: "bed" | "intro_outro" | "sung_story";
+  volume?: number;
+  lyrics_subtitles?: boolean;
+}
+
+export interface CaptionStyle {
+  font_size_scale?: number;
+  color?: string;
+  lyric_color?: string;
+  position?: "bottom" | "lower_third";
+  box?: boolean;
+  font?: "rounded" | "handwritten" | "system";
+}
+
 export interface Track {
   mp3: string;
   flac: string;
@@ -138,6 +154,11 @@ export interface JobSettings {
   script?: ScriptScene[]; // My script: scenes written outside Happica
   characters?: Record<string, string>; // name → look, spelled out in every picture prompt that names them
   sfx_auto?: boolean; // lines/story: the AI adds a sound effect to every scene
+  art_characters?: string[]; // cartoon characters (reference art) drawn with IP-Adapter
+  song?: SongBlock | null; // a sung song: bed, intro/outro or the whole story
+  caption_style?: CaptionStyle | null;
+  output_height?: number | null; // e.g. 1920: 576×1024 is exported as 1080×1920
+  upscale?: "fast" | "ai";
   song_track?: string;
   character?: string; // a character job id
   slides?: { image: string; text: string }[];
@@ -208,7 +229,7 @@ export async function uploadImage(file: File): Promise<{ path: string; width: nu
   return fetch("/api/uploads", { method: "POST", body: form }).then((r) => json(r));
 }
 export const createImages = (settings: ImageSettings) => post("/api/images", settings).then((r) => json<Job>(r));
-export const createCharacter = (c: { name: string; photo: string; kind: string; look: string; consent: boolean }) =>
+export const createCharacter = (c: { name: string; photo: string; kind: string; look: string; consent: boolean; refs?: string[]; style?: string }) =>
   post("/api/characters", c).then((r) => json<Job>(r));
 export const createVoiceover = (settings: VoiceSettings) => post("/api/voiceover", settings).then((r) => json<Job>(r));
 export const createSfx = (settings: SfxSettings) => post("/api/sfx", settings).then((r) => json<Job>(r));

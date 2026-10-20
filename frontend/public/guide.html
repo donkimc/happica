@@ -231,6 +231,10 @@ scripts/start.sh</code></pre>
     <table>
       <thead><tr><th>Step</th><th>Time</th></tr></thead>
       <tbody>
+        <tr><td><strong>A whole 9:16 story</strong> (new sung song, 9 scenes, narration, 9 sound effects, pan &amp; zoom, 1080×1920)</td><td>~7.5 min</td></tr>
+        <tr><td>Using a song with lyrics for the first time (voice/music split + lyric timing)</td><td>~1 min, then stored with the song</td></tr>
+        <tr><td>Scene sound effects</td><td>~20 s for 9</td></tr>
+        <tr><td>Cartoon character scenes</td><td>about twice as long as plain images (~45 s per job to load)</td></tr>
         <tr><td>Story → scenes (AI)</td><td>~15 s</td></tr>
         <tr><td>Narration</td><td>~5–10 s per scene</td></tr>
         <tr><td>Images</td><td>~25 s to load the model, then ~5 s per image</td></tr>
@@ -313,6 +317,23 @@ scripts/start.sh</code></pre>
   <h3>Ambience in videos</h3>
   <p>In the Video tab, <strong>Ambience</strong> adds an environment bed under the whole video, alongside the music: <strong>Auto</strong> describes the setting from your story and makes a seamless loop (about 30 s extra), or pick any sound from your <strong>Sound library</strong>. Like the music, it dips while the narrator speaks. Finished videos can swap both with <strong>Change sound</strong>; <strong>New score</strong> / <strong>New ambience</strong> make a fresh Auto version.</p>
 
+  <h2 id="songs">Sung songs in story videos</h2>
+  <p>In <strong>My script</strong>, <strong>Song</strong> puts a song from your Music library into the video (a song with Korean lyrics sings in Korean — make it in the Music tab with language <em>ko</em>). It can play three ways:</p>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><td><strong>Sung intro &amp; outro</strong></td><td>The chorus is sung at full level over the opening and the ending, with no narration there; the song's own <em>instrumental</em> plays quietly under the narrated middle. Scenes without narration at the start and end of the script become the intro and outro (e.g. a title scene and a dancing finale); if there are none, the first scene waits for the chorus to end before its narration, and the last one stays on screen for the closing chorus.</td></tr>
+        <tr><td><strong>Under the narration</strong></td><td>The whole song as background music, dipping while the narrator speaks.</td></tr>
+        <tr><td><strong>Sung story</strong></td><td>No narration: the song tells the story, and each scene lasts while its share of the lyric lines is sung.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Sung lyrics appear as <span style="color:#d4a600;font-weight:600">yellow</span> subtitles, timed to the singing; narration subtitles stay white. To time them, Happica separates the voice from the music (Demucs) and listens to it with Whisper, then lines up the lyrics you wrote syllable by syllable — your words are shown, not Whisper's guesses. This takes about a minute the first time a song is used; after that it's stored with the song (and Music Videos show sung lyrics too).</p>
+
+  <h2 id="tiktok">TikTok 9:16 videos and captions</h2>
+  <p>The <strong>TikTok story 9:16</strong> preset makes pictures at 576×1024 (the largest portrait size the image model draws well) and exports the finished video at <strong>1080×1920</strong>. Captions are drawn after enlarging, so they stay sharp. <em>Fast resize</em> takes seconds; <em>AI upscale</em> (Real-ESRGAN) adds detail but takes about a second per frame — ~25 minutes for a 1-minute video.</p>
+  <p><strong>Captions &amp; export</strong> in My script sets the caption font — <em>Rounded</em> (Jua) or <em>Handwritten</em> (Gamja Flower), both friendly Korean faces, or the plain system font — the size, bottom or lower-third position, and an optional dark box behind the text. On portrait videos a narration line shows as one or two lines at a time, split at sentence ends, instead of many quick flashes.</p>
+
   <h2 id="voice">Voiceover</h2>
   <p>Paste up to about 5,000 characters, pick one of 294 voices in 33 languages (grouped by language; Korean has 5 female and 5 male voices) and a speed. Blank lines between paragraphs become longer pauses. You get an MP3 to download and a matching <code>.srt</code> subtitle file. A minute of speech takes only a few seconds to make.</p>
 
@@ -325,6 +346,9 @@ scripts/start.sh</code></pre>
     <li>Use them elsewhere: pick them as the <strong>Character</strong> in Images, or as the <strong>Main character</strong> in Story Video. In story mode the AI writes them into the story; in line mode, write their name in the lines where they appear.</li>
   </ol>
   <p class="note">The face model keeps facial features; the <strong>look</strong> description keeps hair and details consistent when the character is aged or restyled — fill it in. Each picture with a character takes about 10 s more.</p>
+
+  <h3>Cartoon characters from reference art</h3>
+  <p>The face model only works for real people. For picture-book characters — the 한복 kids, 아기도깨비 — choose <strong>Cartoon (reference art)</strong> in the Characters tab, upload 1–3 pictures of the character (a clear front view on a plain background works best), and give it a name and look. Happica draws a 4-picture sheet with <strong>IP-Adapter</strong>, which carries the character's colours, shape and outfit from your pictures into new ones. In <strong>My script</strong>, tick the character under <em>Cartoon characters</em>; every scene whose picture names it is drawn from its pictures, and its look is spelled out in the prompt too. If a scene names two cartoon characters, the first one named gets the reference.</p>
 
   <h2 id="helpers">Prompt helpers for AI chatbots</h2>
   <p>Want better results? Use an AI chatbot (ChatGPT, Claude, Gemini…) to write your Happica input. Each helper below teaches the chatbot which model the tool uses, what it does well and badly, and which settings exist — and asks it to answer in the exact fields of the Happica form.</p>
@@ -575,6 +599,9 @@ My request:</pre>
         <tr><td><code>GET /jobs/{id}</code></td><td>Status, progress and <code>files</code> (each with a <code>role</code> — video, audio, image, subtitles… — and a download <code>url</code>)</td></tr>
         <tr><td><code>GET /jobs/{id}/wait?timeout=600</code></td><td>Waits until the job is done (or the timeout passes) and returns it — the simplest way to run jobs one after another</td></tr>
         <tr><td><code>GET /jobs?kind=video&amp;state=done</code></td><td>List jobs (newest first)</td></tr>
+        <tr><td><code>POST /stories</code></td><td><strong>A whole story in one call</strong>: <code>title</code>, <code>style</code>, <code>characters</code> (name → look), <code>art_characters</code>, <code>voice</code>, <code>motion</code>, <code>scenes</code> (<code>image</code>, <code>narration</code>, <code>sfx</code> as text or cues, <code>motion_mode</code>), <code>song</code> (a new song's title/tags/lyrics/bpm/key/language/duration, or <code>track</code>; <code>placement</code> defaults to sung intro &amp; outro when it has lyrics), <code>hashtags</code>, <code>caption</code>. Makes the song, pictures, narration, sound effects, video and the 1080×1920 export as one job. Its files: <code>final</code> (the video), <code>cover</code> (first scene with the title) and <code>caption</code> (title + caption + hashtags).</td></tr>
+        <tr><td><code>POST /stories/batch</code></td><td>Up to 20 stories, made one after another; <code>song_reuse: true</code> makes one song and uses it in every story. Returns all job ids.</td></tr>
+        <tr><td><code>song</code>, <code>caption_style</code>, <code>output_height</code>, <code>art_characters</code> on <code>POST /videos</code></td><td>The same building blocks for any video: a sung song (<code>track</code> or <code>spec</code>, <code>placement</code> <code>bed</code> / <code>intro_outro</code> / <code>sung_story</code>), caption font/size/colour/position/box, export size (<code>upscale</code> <code>fast</code> or <code>ai</code>), cartoon characters. <code>POST /characters</code> with <code>kind: "art"</code> and <code>refs</code> (1–3 uploads) makes a cartoon character.</td></tr>
         <tr><td><code>POST /jobs/{id}/scenes/{i}/regenerate</code>, <code>/scenes/{i}/sfx/{k}/regenerate</code></td><td>Redo one scene's picture (optional new <code>prompt</code>), or one of its sound effects (another take, or a new <code>prompt</code>); the video is rebuilt</td></tr>
         <tr><td><code>POST /jobs/{id}/cancel</code>, <code>/rerun</code>, <code>DELETE /jobs/{id}</code></td><td>Cancel, run again, delete</td></tr>
         <tr><td><code>GET /voices</code>, <code>/music/options</code>, <code>/health</code></td><td>Voice ids, music keys/languages, engine status</td></tr>
@@ -601,6 +628,13 @@ job = api.post("/images", json={"prompt": "a lighthouse at night", "count": 2}).
 job = api.get(f"/jobs/{job['id']}/wait", params={"timeout": 1800}).json()
 for f in job["files"]:
     open(f["name"], "wb").write(api.get(f["url"]).content)</code></pre>
+  <h3>Example: a story file in one call</h3>
+<pre><code>story = json.load(open("stories/test01_ttori.json"))   # title, style, characters, voice, scenes, song
+story["hashtags"] = ["동화", "아기도깨비", "해삐한무지카"]
+job = api.post("/stories", json=story).json()
+job = api.get(f"/jobs/{job['id']}/wait", params={"timeout": 3600}).json()
+files = {f["role"]: f for f in job["files"]}            # final, cover, caption, subtitles, scene_image…
+open("final.mp4", "wb").write(api.get(files["final"]["url"]).content)</code></pre>
   <h3>Example: a 1-hour 1080p video from short clips</h3>
 <pre><code>clips = ["312157cf81d4", "0ba000c22d45"]          # finished video jobs (~30 s each)
 big = []
