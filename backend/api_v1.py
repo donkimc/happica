@@ -8,7 +8,9 @@ files with download URLs (send the same API key header to download them).
 import asyncio
 import json
 import logging
+import random
 import time
+from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
@@ -16,6 +18,7 @@ from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, Field
 
 import app as main
+from pipeline import combine, upscale
 
 log = logging.getLogger("happica.api")
 router = APIRouter(prefix="/api/v1")
@@ -73,7 +76,9 @@ def _files(job: dict) -> list[dict]:
     if r.get("video"):
         out.append(("video", r["video"]))
     for t in r.get("tracks") or []:
-        out += [("audio", t["mp3"]), ("audio_lossless", t["flac"])]
+        out.append(("audio", t["mp3"]))
+        if t.get("flac"):
+            out.append(("audio_lossless", t["flac"]))
     if r.get("subtitles"):
         out.append(("subtitles", r["subtitles"]))
     if r.get("subtitles_vtt"):
@@ -142,15 +147,146 @@ async def create_character(req: CharacterRequest, request: Request):
     return _submit(await main.create_character(req), request)
 
 
-@router.post("/uploads", summary="Upload a picture (for slides or characters); returns its path")
+class CombineItem(BaseModel):
+    job: str = Field(description="A finished video, music, sfx or voiceover job id")
+    take: int = Field(default=1, ge=1, le=2, description="Which take of a music/sfx job (1 or 2)")
+
+
+class CombineRequest(BaseModel):
+    """Join finished jobs into one long file. All items must be videos, or all audio (music, sfx, voiceovers)."""
+    items: list[CombineItem] = Field(min_length=1, max_length=200)
+    target_seconds: float | None = Field(default=None, gt=0, le=combine.MAX_SECONDS,
+                                         description="Repeat the items until this length (e.g. 3600 = 1 hour); omit to play them once")
+    order: str = Field(default="sequence", pattern="^(sequence|shuffle)$", description="shuffle = a new random order each round")
+    fade_in: float = Field(default=0, ge=0, le=30, description="Audio fade-in, seconds")
+    fade_out: float = Field(default=0, ge=0, le=60, description="Audio fade-out, seconds")
+    width: int | None = Field(default=None, ge=256, le=3840, description="Video size (default: the first clip's)")
+    height: int | None = Field(default=None, ge=256, le=2160)
+    seed: int | None = Field(default=None, description="Shuffle seed, for a repeatable order")
+    webhook_url: str | None = WEBHOOK
+
+
+def _combine_sources(items: list[dict]) -> list[tuple[str, Path]]:
+    sources = []
+    for it in items:
+        job = main.store.get(it["job"])
+        if not job:
+            raise ValueError(f"job {it['job']} doesn't exist")
+        sources.append(combine.source_of(job, it.get("take", 1)))
+    if len({k for k, _ in sources}) > 1:
+        raise ValueError("mix of video and audio items — combine videos and audio separately")
+    return sources
+
+
+async def _combine_task(job: dict, job_dir, report) -> dict:
+    try:
+        sources = _combine_sources(job["settings"]["items"])  # re-checked: a source may have been deleted meanwhile
+    except ValueError as e:
+        raise RuntimeError(str(e))
+    return await combine.run(job, job_dir, report, sources)
+
+
+main.runner.pipelines["combine"] = _combine_task
+
+
+@router.post("/combine", status_code=202, summary="Join videos or audio into one long file (e.g. a 1-hour loop)")
+async def create_combine(req: CombineRequest, request: Request):
+    try:
+        sources = _combine_sources([i.model_dump() for i in req.items])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    settings = req.model_dump()
+    if settings["seed"] is None:
+        settings["seed"] = random.randrange(2**31)
+    length = f"{req.target_seconds / 60:.0f} min" if req.target_seconds else "one pass"
+    title = f"Combined {len(req.items)} {sources[0][0]} item{'s' * (len(req.items) > 1)} ({length})"
+    return _submit(main.runner.submit(title, settings, "combine"), request)
+
+
+class UpscaleRequest(BaseModel):
+    """Make a finished job's images or video (or an upload) bigger. Give `job` or `path`, and `target_height` or `scale`."""
+    job: str | None = Field(default=None, description="A finished video, image or character job id")
+    path: str | None = Field(default=None, description="Or an upload's path from /uploads (image or video)")
+    target_height: int | None = Field(default=None, ge=256, le=2160,
+                                      description="e.g. 1080, 1440 or 2160; the short side for portrait clips")
+    scale: float | None = Field(default=None, ge=1.5, le=4, description="Or a factor (default 2); the long side stops at 3840")
+    method: str = Field(default="ai", pattern="^(ai|fast)$",
+                        description="ai = Real-ESRGAN, redraws detail (slow for video: ~0.8 s/frame); fast = plain resize")
+    webhook_url: str | None = WEBHOOK
+
+
+def _upscale_sources(s: dict) -> list[Path]:
+    if bool(s.get("job")) == bool(s.get("path")):
+        raise ValueError("give either job or path")
+    if s.get("job"):
+        job = main.store.get(s["job"])
+        if not job:
+            raise ValueError(f"job {s['job']} doesn't exist")
+        return upscale.sources_of(job)
+    path = (main.OUTPUTS_DIR / s["path"]).resolve()
+    if path.parent != main.UPLOADS.resolve() or not path.is_file():
+        raise ValueError("path must be an upload from /uploads")
+    return [path]
+
+
+async def _upscale_task(job: dict, job_dir, report) -> dict:
+    try:
+        sources = _upscale_sources(job["settings"])
+    except ValueError as e:
+        raise RuntimeError(str(e))
+    cancelled = lambda: (main.store.get(job["id"]) or {}).get("state") == "cancelled"
+    return await upscale.run(job, job_dir, report, sources, cancelled)
+
+
+main.runner.pipelines["upscale"] = _upscale_task
+
+
+@router.post("/upscale", status_code=202, summary="Upscale images or a video to a higher resolution (e.g. 1080p, 4K)")
+async def create_upscale(req: UpscaleRequest, request: Request):
+    settings = req.model_dump()
+    try:
+        sources = _upscale_sources(settings)
+        first = await upscale.probe(sources[0])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    w, h = upscale.target_size(first["width"], first["height"], req.scale, req.target_height)
+    what = "video" if sources[0].suffix.lower() not in upscale.IMAGE_EXT else f"{len(sources)} image{'s' * (len(sources) > 1)}"
+    title = f"Upscaled {what} {first['width']}×{first['height']} → {w}×{h} ({req.method})"
+    return _submit(main.runner.submit(title, settings, "upscale"), request)
+
+
+VIDEO_EXT = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
+MAX_VIDEO_UPLOAD = 1024 * 1024 * 1024
+
+
+@router.post("/uploads", summary="Upload a picture (for slides, characters or upscaling) or a video (for upscaling); returns its path")
 async def upload(file: UploadFile = File(...)):
-    return await main.upload_image(file)
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in VIDEO_EXT and not (file.content_type or "").startswith("video/"):
+        return await main.upload_image(file)
+    main.UPLOADS.mkdir(parents=True, exist_ok=True)
+    out = main.UPLOADS / f"{main.uuid.uuid4().hex[:16]}{ext if ext in VIDEO_EXT else '.mp4'}"
+    size = 0
+    with out.open("wb") as f:
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_VIDEO_UPLOAD:
+                f.close(); out.unlink()
+                raise HTTPException(413, "Videos must be under 1 GB")
+            f.write(chunk)
+    try:
+        info = await upscale.probe(out)
+    except ValueError:
+        out.unlink()
+        raise HTTPException(400, "That file isn't a video this app can read (MP4, MOV, WebM, MKV)")
+    return {"path": str(out.relative_to(main.OUTPUTS_DIR)), "width": info["width"], "height": info["height"],
+            "duration": round(info["duration"], 2)}
 
 
 # ---------- jobs ----------
 
 @router.get("/jobs", summary="List jobs, newest first")
-async def list_jobs(request: Request, kind: str | None = Query(None, pattern="^(video|image|music|sfx|voice|character)$"),
+async def list_jobs(request: Request, kind: str | None = Query(None, pattern="^(video|image|music|sfx|voice|character|combine|upscale)$"),
                     state: str | None = Query(None, pattern="^(queued|running|done|failed|cancelled)$"),
                     limit: int = Query(50, ge=1, le=500)):
     base = _base_url(request)

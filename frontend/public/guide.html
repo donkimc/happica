@@ -558,7 +558,9 @@ My request:</pre>
         <tr><td><code>POST /sfx</code></td><td>A sound effect or seamless ambience loop</td></tr>
         <tr><td><code>POST /voiceovers</code></td><td>Narration MP3 + subtitles from text</td></tr>
         <tr><td><code>POST /characters</code></td><td>A reusable character from an uploaded face photo</td></tr>
-        <tr><td><code>POST /uploads</code></td><td>Upload a picture (multipart field <code>file</code>); returns its <code>path</code> for slides or characters</td></tr>
+        <tr><td><code>POST /combine</code> <em>(API only)</em></td><td>Join finished videos — or finished music, sound effects and voiceovers — into one long file, e.g. a 1-hour ambience or music mix. <code>items</code>: <code>[{"job": "…", "take": 1}]</code>; <code>target_seconds</code> repeats them up to that length (max 4 hours); <code>order</code>: <code>sequence</code> or <code>shuffle</code>; <code>fade_in</code>/<code>fade_out</code> seconds; <code>width</code>/<code>height</code> for video (clips of other sizes are letterboxed). A 1-hour video takes seconds.</td></tr>
+        <tr><td><code>POST /upscale</code> <em>(API only)</em></td><td>Make a finished video, image or character job (<code>job</code>) — or an upload (<code>path</code>) — bigger: <code>target_height</code> (720, 1080, 1440, 2160…) or <code>scale</code> (1.5–4). <code>method</code>: <code>ai</code> (Real-ESRGAN redraws detail — ~25 s per image, ~0.8 s per video frame) or <code>fast</code> (plain resize, seconds). Sound is kept.</td></tr>
+        <tr><td><code>POST /uploads</code></td><td>Upload a picture (multipart field <code>file</code>) for slides, characters or upscaling — or a video (MP4, MOV, WebM, MKV, up to 1 GB) for upscaling; returns its <code>path</code></td></tr>
         <tr><td><code>GET /jobs/{id}</code></td><td>Status, progress and <code>files</code> (each with a <code>role</code> — video, audio, image, subtitles… — and a download <code>url</code>)</td></tr>
         <tr><td><code>GET /jobs/{id}/wait?timeout=600</code></td><td>Waits until the job is done (or the timeout passes) and returns it — the simplest way to run jobs one after another</td></tr>
         <tr><td><code>GET /jobs?kind=video&amp;state=done</code></td><td>List jobs (newest first)</td></tr>
@@ -587,6 +589,16 @@ job = api.post("/images", json={"prompt": "a lighthouse at night", "count": 2}).
 job = api.get(f"/jobs/{job['id']}/wait", params={"timeout": 1800}).json()
 for f in job["files"]:
     open(f["name"], "wb").write(api.get(f["url"]).content)</code></pre>
+  <h3>Example: a 1-hour 1080p video from short clips</h3>
+<pre><code>clips = ["312157cf81d4", "0ba000c22d45"]          # finished video jobs (~30 s each)
+big = []
+for c in clips:                                    # 1) upscale each short clip (~10 min each)
+    j = api.post("/upscale", json={"job": c, "target_height": 1080}).json()
+    big.append(api.get(f"/jobs/{j['id']}/wait", params={"timeout": 3600}).json()["id"])
+j = api.post("/combine", json={"items": [{"job": b} for b in big],   # 2) repeat to 1 hour (seconds)
+                               "target_seconds": 3600, "order": "shuffle", "fade_out": 5}).json()
+job = api.get(f"/jobs/{j['id']}/wait", params={"timeout": 3600}).json()</code></pre>
+  <p>Upscale first, then combine: combining copies the clips instead of re-encoding, so upscaling a 1-hour file would take ~100× longer than upscaling its short clips.</p>
   <p class="note">Treat keys like passwords: anyone with one can use your Mac's GPU and download what you've made. Use one key per app so you can revoke them separately. Wrong keys are rate-limited like wrong passwords.</p>
 
   <h2 id="trouble">Troubleshooting</h2>

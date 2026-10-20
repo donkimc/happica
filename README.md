@@ -76,6 +76,13 @@ Narration voices (Kokoro TTS, 354 MB):
 mkdir -p models/tts && for f in kokoro-v1.0.onnx voices-v1.0.bin; do curl -L -o models/tts/$f https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/$f; done
 ```
 
+Upscaling (API only) uses two Real-ESRGAN models — 64 MB for pictures, 5 MB for video — run by `backend/tools/upscale_worker.py` in ComfyUI's Python:
+
+```bash
+curl -L -o models/upscale_models/RealESRGAN_x4plus.pth https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
+curl -L -o models/upscale_models/realesr-general-x4v3.pth https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-general-x4v3.pth
+```
+
 Story mode needs [Ollama](https://ollama.com) running with a small model:
 
 ```bash
@@ -103,7 +110,9 @@ Other apps automate Happica through `/api/v1` with an API key (create and revoke
 | Call | Purpose |
 |---|---|
 | `POST /videos` · `/images` · `/music` · `/music/draft` · `/sfx` · `/voiceovers` · `/characters` | Start a job (202 + job); optional `webhook_url` |
-| `POST /uploads` | Upload a picture (multipart `file`) for slides or characters |
+| `POST /combine` | **API only.** Join finished videos, or finished audio (music, sfx, voiceovers), into one long file: `items: [{job, take}]`, `target_seconds` (repeat up to 4 h, e.g. 3600), `order` sequence/shuffle, `fade_in`/`fade_out`, `width`/`height` for video |
+| `POST /upscale` | **API only.** Make a finished video/image/character job (`job`) or an upload (`path`) bigger: `target_height` (e.g. 1080, 2160) or `scale` (1.5–4), `method` `ai` (Real-ESRGAN) or `fast` (resize) |
+| `POST /uploads` | Upload a picture (multipart `file`) for slides, characters or upscaling, or a video (MP4/MOV/WebM/MKV, up to 1 GB) for upscaling |
 | `GET /jobs/{id}` · `/jobs/{id}/wait?timeout=` · `/jobs?kind=&state=&limit=` | Status, block until finished, list |
 | `POST /jobs/{id}/cancel` · `/jobs/{id}/rerun` · `DELETE /jobs/{id}` | Manage jobs |
 | `GET /health` · `/voices` · `/music/options` | Info |
@@ -134,6 +143,10 @@ Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves th
 | AI motion clip (LTX-Video, 3 s at 768×512) | ~6.5 min |
 | Song, 2 takes (ACE-Step 1.5) | ~2 min for 30 s, ~3 min for 1 min |
 | Sound effect, 2 takes (Stable Audio 3 small SFX) | ~5 s for 10 s, ~15 s for 45 s (+~8 s with AI detail) |
+| Combine into 1 hour (API) | ~6 s for video (clips are joined without re-encoding), ~35 s for audio |
+| AI upscale (Real-ESRGAN, API) | ~25 s per 768×512 image; video ~0.8 s per frame (a 30 s clip ≈ 10 min). `fast` resize: seconds |
+
+For long upscaled videos, upscale the short clips first, then combine them: combining copies video instead of re-encoding it.
 
 ComfyUI starts with two flags that matter on a 16 GB Mac:
 
