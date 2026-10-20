@@ -56,6 +56,12 @@
   .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
   .note { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; color: var(--muted); font-size: 14px; }
   kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  .helper { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 4px 14px 12px; margin: 14px 0; }
+  .helper-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .helper-head h3 { margin: 10px 0 6px; }
+  .copy { font: inherit; font-size: 13px; font-weight: 600; border: 0; border-radius: 8px; padding: 6px 14px; background: var(--accent); color: white; cursor: pointer; }
+  .copy.done { background: var(--ok); }
+  pre.prompt { white-space: pre-wrap; max-height: 260px; overflow-y: auto; margin: 4px 0 0; line-height: 1.45; }
 </style>
 </head>
 <body>
@@ -84,6 +90,7 @@
       <li><a href="#sfx">Sound effects</a></li>
       <li><a href="#voice">Voiceover</a></li>
       <li><a href="#characters">Characters</a></li>
+      <li><a href="#helpers">Prompt helpers for AI chatbots</a></li>
       <li><a href="#trouble">Troubleshooting</a></li>
       <li><a href="#files">Where files are</a></li>
     </ol>
@@ -300,6 +307,225 @@ scripts/start.sh</code></pre>
   </ol>
   <p class="note">The face model keeps facial features; the <strong>look</strong> description keeps hair and details consistent when the character is aged or restyled — fill it in. Each picture with a character takes about 10 s more.</p>
 
+  <h2 id="helpers">Prompt helpers for AI chatbots</h2>
+  <p>Want better results? Use an AI chatbot (ChatGPT, Claude, Gemini…) to write your Happica input. Each helper below teaches the chatbot which model the tool uses, what it does well and badly, and which settings exist — and asks it to answer in the exact fields of the Happica form.</p>
+  <ol class="steps">
+    <li>Click <strong>Copy</strong> on the helper for the tool you want.</li>
+    <li>Paste it into a new chatbot conversation, then type your idea right after it (or after the last line, “My request:”).</li>
+    <li>Copy each field of the answer into the matching box in Happica.</li>
+  </ol>
+  <p class="note">The chatbot never sees Happica — it only writes text for you to paste. You can keep chatting (“make it darker”, “shorter lyrics”) and it keeps the rules.</p>
+
+  <div class="helper">
+    <div class="helper-head"><h3>Images</h3><button class="copy" type="button">Copy</button></div>
+<pre class="prompt">You are helping me write input for the Images tool of Happica, a local AI studio.
+
+How the tool works:
+- Model: SDXL-Turbo (Stable Diffusion XL, distilled to 4 steps). It runs with guidance turned off, so negative prompts and "no X" have NO effect — describe only what should be there.
+- The prompt is read by a CLIP text encoder that only uses about the first 60 words. Put the most important things first.
+- Works best with comma-separated descriptive phrases: subject, appearance, action, setting, lighting, camera/composition, mood.
+- Weak at: readable text or logos in the image, exact counts of objects, hands and complex poses, two or more specific people interacting, precise left/right placement. Avoid relying on these.
+- Strong at: single clear subjects, landscapes, interiors, food, products, portraits, and art styles.
+- Fields in the form: Prompt; Style (added to the end of the prompt, e.g. "watercolor illustration", "photorealistic, 35mm photo", "anime style", "oil painting"); Size (768x512 landscape, 512x768 portrait, 512x512 square, 1024x1024 square = slower); Images (1-4 variations); Character (optional: a saved person — if I name one, write their name in the prompt where they appear).
+
+Your job: turn my idea into the best input for this tool. Keep the prompt under 60 words. Do not use "no", "without" or "not". Pick the size that fits the composition.
+
+Answer in exactly this format:
+Prompt: ...
+Style: ...
+Size: ...
+Images: ...
+Tip: one short sentence on what to change if the result isn't right.
+
+If my request depends on something the model is weak at, say so in Tip and suggest a workaround.
+
+My request:</pre>
+  </div>
+
+  <div class="helper">
+    <div class="helper-head"><h3>Story Video</h3><button class="copy" type="button">Copy</button></div>
+<pre class="prompt">You are helping me write input for the Story Video tool of Happica, a local AI studio that turns text into a narrated video.
+
+How the tool works:
+- Each scene's picture is made by SDXL-Turbo (about 60 words of prompt are used, negative words have no effect, weak at text, hands and crowds of specific people). Each picture is generated SEPARATELY, so a recurring character must be described the same way in every scene (hair, age, clothing, colors).
+- Two scene modes:
+  1) "One line per scene": every line I write becomes one scene. The line is BOTH the picture description AND, if Narration is on, the sentence that is read aloud. Best for short visual videos without narration.
+  2) "Story — AI writes the scenes": I write plain prose; a small local AI (qwen2.5 3B) splits it into scenes and writes the picture prompt, a motion hint and one line of narration per scene. Best for narrated stories. Keep the story clear and concrete: who, where, what happens, in order. Short stories (4-8 sentences) work best.
+- Motion: "Images only"; "Pan &amp; zoom" (fast camera move over each still); "AI motion" (LTX-Video 2B animates each scene: subtle natural movement like water, fire, hair, a slow camera drift; about 6-7 minutes PER SCENE; not good at fast action or big movements).
+- Narration: Kokoro voice, 54 voices in 9 languages (English US/UK, Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin). The text must be in the voice's language. One or two sentences, max ~25 words per scene. Scenes stretch to fit their narration.
+- Other settings: Style (added to every picture prompt), Size (landscape 768x512, portrait 512x768, square 512x512), Scenes (max count), Seconds per scene (2-6), Subtitles (burned in / toggleable / off), Background music (off / auto-composed / from my Music library), Ambience (off / auto / from my Sound library), Main character (a saved person; write their name in the scenes where they appear).
+
+Your job: ask me nothing unless the idea is unclear; choose the best mode and settings and write the text.
+- In "One line per scene" mode: write one scene per line, each a self-contained visual description under 40 words, repeating recurring characters' looks every time.
+- In story mode: write the story as clear prose, and repeat recurring characters' appearance at least once.
+
+Answer in exactly this format:
+Mode: One line per scene / Story
+Text: (the lines or the story)
+Style: ...
+Size: ...
+Motion: ...
+Narration: on/off, Voice: (language and male/female)
+Subtitles: ...
+Background music: off / auto / library (and what kind)
+Ambience: off / auto (and what it should sound like)
+Seconds per scene: ...
+Tip: one sentence about what to watch for.
+
+My request:</pre>
+  </div>
+
+  <div class="helper">
+    <div class="helper-head"><h3>Slideshow</h3><button class="copy" type="button">Copy</button></div>
+<pre class="prompt">You are helping me write narration for the Slideshow tool of Happica, a local AI studio that turns my photos into a narrated video.
+
+How the tool works:
+- I upload my own photos (or use generated ones) and put them in order. Each slide can have an optional narration text (max 400 characters), read aloud by a Kokoro voice and shown as subtitles. Slides without text stay silent for the "Seconds per scene" time (2-6 s).
+- Photos are cropped to fill the frame (768x512 landscape, 512x768 portrait or 512x512 square): important things should be near the center.
+- Narration works best as one or two short spoken sentences per slide (8-25 words), written for the ear: simple words, no lists, no abbreviations, no emoji, numbers written the way they are said. The text must be in the voice's language (English US/UK, Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin).
+- Optional: background music (auto-composed or from my Music library) and ambience; the music automatically gets quieter while the narrator speaks.
+
+Your job: I'll describe my photos in order (or the event they show). Write narration that flows from slide to slide like a short story with a beginning and an end. Leave some slides silent if a pause works better.
+
+Answer in exactly this format:
+Slide 1: (narration or "silent")
+Slide 2: ...
+(one line per slide)
+Voice: (language and male/female)
+Size: ...
+Background music: off / auto / library (and what kind)
+Seconds per silent slide: ...
+
+My request:</pre>
+  </div>
+
+  <div class="helper">
+    <div class="helper-head"><h3>Music</h3><button class="copy" type="button">Copy</button></div>
+<pre class="prompt">You are helping me write a song for the Music tool of Happica, a local AI studio.
+
+How the tool works:
+- Model: ACE-Step 1.5 (turbo) with a 1.7B "song planner". It makes full songs with sung lyrics, or instrumentals, 30 seconds to 4 minutes. Two takes per song.
+- Style field: comma-separated tags describing only how the music SOUNDS: genre, sub-genre, mood, 3-5 instruments, production feel, and the vocal type (e.g. "female vocals", "male vocals", "duet", "choir"). 6-12 tags, lowercase. No artist or song names (they don't work and imitate real artists), no tempo or key in the tags (those have their own fields).
+- Lyrics field: section tags on their own lines in square brackets: [intro] [verse] [pre-chorus] [chorus] [bridge] [outro]. Short singable lines (4-9 words), simple rhymes, a chorus with a repeated hook line. No stage directions, no notes, no chords. Leave a blank line between sections.
+- How much fits: 30 s = [verse] + [chorus] (4 lines each). 60 s = verse, chorus, verse, chorus. 90-120 s = intro, verse, chorus, verse, chorus, bridge, chorus, outro. Longer = add pre-choruses and a final double chorus. Too many lyrics for the length get rushed or cut.
+- Other fields: Title; Instrumental (on = no lyrics); Length (30 s, 1, 1.5, 2, 3 or 4 min); BPM (30-300); Key (e.g. "A minor", "E major"); Time (2/4, 3/4, 4/4, 6/4); Lyrics language (51 languages; the lyrics must be written in it).
+
+Your job: write a complete song for my idea that fits the chosen length. Pick a BPM, key and time signature that suit the mood (minor keys for sad or dark songs).
+
+Answer in exactly this format:
+Title: ...
+Style: ...
+Instrumental: yes/no
+Length: ...
+BPM: ...
+Key: ...
+Time: ...
+Lyrics language: ...
+Lyrics:
+(the lyrics with section tags, or nothing if instrumental)
+
+My request:</pre>
+  </div>
+
+  <div class="helper">
+    <div class="helper-head"><h3>Music Video</h3><button class="copy" type="button">Copy</button></div>
+<pre class="prompt">You are helping me plan a music video in Happica's Music Video tool.
+
+How the tool works:
+- I pick a song I made in Happica's Music tab. A small local AI splits the song's lyrics into one slice per scene, in order, and writes a picture for each slice; pictures are made with SDXL-Turbo and cut to the song's exact length. For instrumentals it invents a visual story from the song's mood.
+- What I control: Visual style (one line, added to every picture, e.g. "soft pastel watercolor, storybook illustration"), Size (768x512, 512x768, 512x512), Motion (pan &amp; zoom, or AI motion with LTX-Video: subtle natural movement, about 6-7 minutes per scene), and Seconds per scene (2-6; the number of scenes = song length / this).
+- The pictures follow the lyrics' imagery, so concrete lyrics (places, objects, actions, weather, colors) give better videos than abstract ones ("love", "forever").
+- SDXL-Turbo is weak at text, hands and crowds; strong at atmosphere, places, single characters and art styles.
+
+Your job: given my song (title, style and lyrics, which I'll paste) and what I want the video to feel like:
+1) Write the best Visual style line (under 15 words).
+2) Recommend Size, Motion and Seconds per scene.
+3) If the lyrics are too abstract to picture, suggest small lyric edits that keep the meaning but add concrete imagery (I can re-make the song with them).
+
+Answer in exactly this format:
+Visual style: ...
+Size: ...
+Motion: ...
+Seconds per scene: ...
+Lyric suggestions: (or "none")
+
+My song and what I want:</pre>
+  </div>
+
+  <div class="helper">
+    <div class="helper-head"><h3>Sound FX</h3><button class="copy" type="button">Copy</button></div>
+<pre class="prompt">You are helping me write descriptions for the Sound FX tool of Happica, a local AI studio.
+
+How the tool works:
+- Model: Stable Audio 3 small SFX, made for sound effects and ambiences (not music, not intelligible speech). Clips are 3 to 45 seconds.
+- Best description: ONE sentence (20-40 words) of what is heard: the sound sources, their texture and rhythm (steady, intermittent, rising), how near or far they are, and the space they're in (small room, cave, open field, street). Example: "gentle ocean waves rolling onto a sandy beach, soft foam hiss, distant seagulls, calm open seaside ambience".
+- Don't describe visuals, emotions or stories, and don't ask for music or words.
+- Settings: Length (3, 5, 10, 20, 30, 45 s); Seamless loop (on for ambiences that play under a video — waves, rain, night, crowd; off for one-shots — a door, footsteps, a whoosh, an explosion); "AI adds detail" (a local AI expands short ideas; turn it off when my description is already detailed); Takes (1-2).
+- One-shots should be short (3-5 s) and describe a single event from start to end. Ambiences should be 10-30 s and steady, with no big one-off events, so they loop well.
+
+Your job: for each sound I ask for, write the best description and settings. If I ask for a whole scene ("a haunted house"), split it into separate sounds: one ambience bed plus a few one-shots.
+
+Answer in exactly this format, one block per sound:
+Sound: (short name)
+Description: ...
+Length: ...
+Seamless loop: on/off
+AI adds detail: off
+
+My request:</pre>
+  </div>
+
+  <div class="helper">
+    <div class="helper-head"><h3>Voiceover</h3><button class="copy" type="button">Copy</button></div>
+<pre class="prompt">You are helping me write a script for the Voiceover tool of Happica, a local AI studio.
+
+How the tool works:
+- Voice model: Kokoro (82M), 54 voices in 9 languages: English US, English UK, Spanish, French, Hindi, Italian, Japanese, Portuguese (Brazil), Mandarin. The voice reads exactly the text it gets, so the text must be in the voice's language.
+- It reads punctuation as rhythm: commas = short pause, periods = longer pause, a blank line between paragraphs = a clear pause. Question marks raise the tone.
+- It cannot whisper, shout, laugh, change emotion on command or read stage directions — anything in brackets or asterisks is read aloud or ignored. Emotion comes only from the words and punctuation.
+- Avoid: abbreviations (write "for example", not "e.g."), symbols (&amp;, %, $ → words), emoji, URLs, markdown, all-caps, and long numbers (write them as spoken: "twenty twenty-six", "three point five million").
+- Up to about 5,000 characters. Speed is adjustable (0.6x-1.5x); about 150 words = 1 minute at 1.0x.
+- Output: an MP3 and a matching subtitle file.
+
+Your job: write or rewrite my script so it sounds natural when spoken: short sentences (under 20 words), conversational, clear paragraph breaks where the topic changes. Keep my meaning and facts. Tell me the target length.
+
+Answer in exactly this format:
+Voice: (language, female/male, and the feel: warm, calm, energetic…)
+Speed: ...
+Estimated length: ... seconds
+Script:
+(the text, ready to paste)
+
+My request:</pre>
+  </div>
+
+  <div class="helper">
+    <div class="helper-head"><h3>Characters</h3><button class="copy" type="button">Copy</button></div>
+<pre class="prompt">You are helping me set up and use a Character in Happica, a local AI studio.
+
+How the tool works:
+- I upload one face photo. PhotoMaker (with SDXL-Turbo) learns the face and puts it in new pictures and videos. It keeps facial features well but tends to lose hair style, hair color, skin details (freckles, moles) and age cues — so each character also has a written "Look" that is added to every prompt with them.
+- Fields: Name (one word or a short name, used to place the character in prompts); Is a (woman, man, girl, boy, person); Look (max 300 characters).
+- A good Look lists only permanent physical traits, most distinctive first: hair (color, length, texture, style), eyes, skin tone and marks (freckles, beard, glasses if always worn), approximate age. NOT clothing, expression, pose or setting — those change per picture and go in the prompt.
+- Using the character: in Images, pick the character and write a prompt with their name ("Maya as a 70-year-old, smiling, garden at sunset"). In Story Video, pick them as Main character and write their name in each scene where they appear. Changes like older/younger, costumes, hairstyles and art styles work well. Prompts are limited to about 60 words; negative words have no effect.
+- Best photo: one person, face clearly visible and front-facing, good even light, no sunglasses, not heavily filtered. Only use photos of yourself or of people who agreed.
+
+Your job:
+1) From my description of the person (or the photo, if you can see it), write the Name, Is a, and Look fields.
+2) Then write 3 example prompts with the character for the uses I mention, each under 50 words, using the name.
+
+Answer in exactly this format:
+Name: ...
+Is a: ...
+Look: ...
+Example prompts:
+1. ...
+2. ...
+3. ...
+
+My request:</pre>
+  </div>
+
   <h2 id="trouble">Troubleshooting</h2>
   <div class="table-wrap">
     <table>
@@ -338,5 +564,26 @@ scripts/start.sh</code></pre>
   </div>
   <p style="margin-top: 32px"><a class="back" href="/">← Back to the app</a></p>
 </main>
+<script>
+  // Copy a prompt helper; falls back to selecting the text where the clipboard isn't available
+  document.querySelectorAll(".helper .copy").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const pre = button.closest(".helper").querySelector("pre.prompt");
+      const text = pre.textContent.trim() + "\n";
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "Copied ✓";
+        button.classList.add("done");
+        setTimeout(() => { button.textContent = "Copy"; button.classList.remove("done"); }, 2000);
+      } catch {
+        const range = document.createRange();
+        range.selectNodeContents(pre);
+        getSelection().removeAllRanges();
+        getSelection().addRange(range);
+        button.textContent = "Selected — press ⌘C";
+      }
+    });
+  });
+</script>
 </body>
 </html>
