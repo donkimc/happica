@@ -98,7 +98,7 @@ Then open http://127.0.0.1:5173. Logs go to `outputs/logs/`.
 
 ## REST API (v1)
 
-Other apps automate Happica through `/api/v1` with an API key (create and revoke keys in the web app header → **API keys**; only a SHA-256 hash is stored). Send `Authorization: Bearer hap_…` or `X-API-Key: hap_…`. Interactive docs: `/api/v1/docs` (OpenAPI at `/api/v1/openapi.json`).
+Other apps automate Happica through `/api/v1` with an API key (create and revoke keys in the web app's ☰ menu → **API keys**; only a SHA-256 hash is stored). Send `Authorization: Bearer hap_…` or `X-API-Key: hap_…`. Interactive docs: `/api/v1/docs` (OpenAPI at `/api/v1/openapi.json`).
 
 | Call | Purpose |
 |---|---|

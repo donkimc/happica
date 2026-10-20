@@ -71,6 +71,7 @@
     <a class="back" href="/">← Back to the app</a>
   </header>
   <p class="lead">Turn a few lines of text — or a whole story — into a narrated video, entirely on your Mac.</p>
+  <p class="note">You can open this guide anytime from the <strong>☰ menu</strong> → <strong>How to use</strong>.</p>
 
   <nav class="toc" aria-label="Contents">
     <ol>
@@ -132,7 +133,7 @@ scripts/start.sh</code></pre>
   <h3>Using Happica from anywhere</h3>
   <p>The studio is also online at your Railway address, protected by a password. The website itself runs on Railway, but all the work still happens on this Mac through a secure Cloudflare tunnel — so the Mac must be on and <code>scripts/start.sh</code> running. While it runs, the Mac won't fall asleep on its own.</p>
   <ul>
-    <li><strong>Password:</strong> set in the <code>.env</code> file in the project folder (<code>HAPPICA_PASSWORD=…</code>). After changing it, restart <code>scripts/start.sh</code>. Logins last 30 days per browser; <strong>Log out</strong> is in the header.</li>
+    <li><strong>Password:</strong> set in the <code>.env</code> file in the project folder (<code>HAPPICA_PASSWORD=…</code>). After changing it, restart <code>scripts/start.sh</code>. Logins last 30 days per browser; <strong>Log out</strong> is in the <strong>☰ menu</strong> (top right).</li>
     <li><strong>After a restart</strong> the tunnel gets a new address, which <code>start.sh</code> sends to Railway automatically — the website works again within about a minute.</li>
     <li>Too many wrong passwords pause logins for 15 minutes.</li>
   </ul>
@@ -537,7 +538,7 @@ My request:</pre>
   <h2 id="api">REST API for other apps</h2>
   <p>Other programs — on this Mac or anywhere through your public address — can make videos, images, music, sound effects and voiceovers with an <strong>API key</strong>. Everything a person can do in the tabs, the API can do.</p>
   <ol class="steps">
-    <li>In the app header click <strong>API keys</strong>, give the key a name (e.g. “Batch video app”) and <strong>Create key</strong>. Copy it right away — it's shown only once. Revoke a key there anytime.</li>
+    <li>Open the <strong>☰ menu</strong> (top right) → <strong>API keys</strong>, give the key a name (e.g. “Batch video app”) and <strong>Create key</strong>. Copy it right away — it's shown only once. Revoke a key there anytime.</li>
     <li>Send it with every request: <code>Authorization: Bearer hap_…</code> (or <code>X-API-Key: hap_…</code>).</li>
     <li>Open the <strong>interactive API docs</strong> at <a href="/api/v1/docs">/api/v1/docs</a> (while logged in) to see every field and try calls in the browser.</li>
   </ol>
@@ -627,6 +628,9 @@ for f in job["files"]:
   <p style="margin-top: 32px"><a class="back" href="/">← Back to the app</a></p>
 </main>
 <script>
+  // Inside the app (How to use page) the app has its own Back button: drop the guide's links back to the app
+  if (window.self !== window.top) document.querySelectorAll("a.back").forEach((a) => a.remove());
+
   // Copy a prompt helper; falls back to selecting the text where the clipboard isn't available
   document.querySelectorAll(".helper .copy").forEach((button) => {
     button.addEventListener("click", async () => {

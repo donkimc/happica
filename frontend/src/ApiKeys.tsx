@@ -40,16 +40,18 @@ export default function ApiKeys({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <section className="card api-keys">
-      <div className="row between">
-        <strong>API keys — let other apps use Happica</strong>
-        <button className="link" onClick={onClose}>Close</button>
+    <section className="page">
+      <div className="row between page-head">
+        <h2>API keys</h2>
+        <button className="secondary inline" onClick={onClose}>← Back to the studio</button>
       </div>
+    <div className="card api-keys">
       <p className="muted tight">
+        Let other apps use Happica.
         Other apps send a key with each request (<code>Authorization: Bearer hap_…</code>) to make videos, images, music,
         sound effects and voiceovers. See the{" "}
         <a href="/api/v1/docs" target="_blank" rel="noreferrer">interactive API docs</a> and the{" "}
-        <a href="/guide.html#api" target="_blank" rel="noreferrer">guide</a>.
+        <a href="#guide">guide</a>.
       </p>
 
       {fresh && (
@@ -110,6 +112,7 @@ export default function ApiKeys({ onClose }: { onClose: () => void }) {
           </tbody>
         </table>
       )}
+    </div>
     </section>
   );
 }

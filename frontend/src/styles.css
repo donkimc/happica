@@ -104,8 +104,6 @@ select:disabled { opacity: 0.5; }
 .chip.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .generate { display: flex; align-items: center; gap: 10px; }
 .header-right { display: flex; align-items: center; gap: 12px; }
-.guide-link { font-size: 13px; color: var(--accent); text-decoration: none; }
-.guide-link:hover { text-decoration: underline; }
 
 /* Music Studio */
 .brand { display: flex; align-items: center; gap: 18px; }
@@ -205,3 +203,27 @@ table.keys { width: 100%; border-collapse: collapse; font-size: 13px; margin-top
 table.keys th, table.keys td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 table.keys th { color: var(--muted); font-weight: 600; }
 @media (max-width: 560px) { table.keys th:nth-child(3), table.keys td:nth-child(3) { display: none; } }
+
+/* ☰ menu and menu pages */
+.menu { position: relative; }
+.menu-button {
+  background: transparent; color: var(--text); border: 1px solid var(--border);
+  width: 38px; height: 34px; padding: 0; font-size: 18px; line-height: 1; border-radius: 8px;
+}
+.menu-button[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.menu-list {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 180px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); display: flex; flex-direction: column;
+}
+.menu-list button {
+  background: transparent; color: var(--text); text-align: left; font-weight: 500; font-size: 14px;
+  padding: 9px 12px; border-radius: 6px;
+}
+.menu-list button:hover, .menu-list button.on { background: var(--bg); }
+.menu-list button.on { color: var(--accent); }
+.menu-list hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+.page-head { margin: 4px 0 12px; }
+.page-head h2 { margin: 0; }
+.guide-frame { width: 100%; height: calc(100vh - 170px); min-height: 480px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
+@media (max-width: 560px) { .menu-list { left: 0; right: auto; } } /* the header wraps: the ☰ button sits at the left */

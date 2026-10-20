@@ -25,7 +25,7 @@
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy same-origin
-		X-Frame-Options DENY
+		X-Frame-Options SAMEORIGIN
 		-Server
 	}
 }

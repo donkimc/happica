@@ -22,6 +22,7 @@ import JobDetail from "./JobDetail";
 import JobGallery from "./JobGallery";
 import Login from "./Login";
 import ApiKeys from "./ApiKeys";
+import Menu, { GuidePage, Page } from "./Menu";
 import MusicStudio from "./MusicStudio";
 import ImageStudio from "./ImageStudio";
 import SfxStudio from "./SfxStudio";
@@ -54,7 +55,8 @@ export default function App() {
   );
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>(tabFromHash);
-  const [showKeys, setShowKeys] = useState(false);
+  // Menu pages (How to use, API keys) take the place of the tools; #guide / #keys survive a reload
+  const [page, setPage] = useState<Page>(() => (location.hash === "#guide" ? "guide" : location.hash === "#keys" ? "keys" : "tools"));
   const [slides, setSlides] = useState<SlideItem[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(SLIDES_KEY) ?? "[]");
@@ -70,7 +72,11 @@ export default function App() {
   const watching = useRef(new Map<string, () => void>());
 
   useEffect(() => {
-    const onHash = () => setTab(tabFromHash());
+    const onHash = () => {
+      const p: Page = location.hash === "#guide" ? "guide" : location.hash === "#keys" ? "keys" : "tools";
+      setPage(p);
+      if (p === "tools") setTab(tabFromHash());
+    };
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);
   }, []);
@@ -153,7 +159,13 @@ export default function App() {
   const switchTab = (t: Tab) => {
     setError(null);
     setTab(t);
+    setPage("tools");
     history.replaceState(null, "", t === "video" ? location.pathname : `#${t}`);
+  };
+  const openPage = (p: Page) => {
+    setPage(p);
+    history.replaceState(null, "", p === "tools" ? (tab === "video" ? location.pathname : `#${tab}`) : `#${p}`);
+    scrollTo(0, 0);
   };
 
   if (authState === "checking") return <main className="login-page" />;
@@ -166,29 +178,23 @@ export default function App() {
           <h1>Happica</h1>
           <nav className="tabs" aria-label="Studio">
             {TABS.map((t) => (
-              <button key={t.id} className={tab === t.id ? "on" : ""} aria-current={tab === t.id} onClick={() => switchTab(t.id)}>
+              <button key={t.id} className={page === "tools" && tab === t.id ? "on" : ""} aria-current={page === "tools" && tab === t.id} onClick={() => switchTab(t.id)}>
                 {t.label}
               </button>
             ))}
           </nav>
         </div>
         <div className="header-right">
-          <a className="guide-link" href="/guide.html" target="_blank" rel="noreferrer">
-            How to use
-          </a>
           <StatusPill health={health} />
-          <button className="link" onClick={() => setShowKeys((v) => !v)}>
-            API keys
-          </button>
-          <button className="link" onClick={() => logout().finally(() => setAuthState("out"))}>
-            Log out
-          </button>
+          <Menu page={page} onPage={openPage} onLogout={() => logout().finally(() => setAuthState("out"))} />
         </div>
       </header>
 
-      {showKeys && <ApiKeys onClose={() => setShowKeys(false)} />}
-
-      {tab === "character" ? (
+      {page === "guide" ? (
+        <GuidePage onBack={() => openPage("tools")} />
+      ) : page === "keys" ? (
+        <ApiKeys onClose={() => openPage("tools")} />
+      ) : tab === "character" ? (
         <CharacterStudio
           characters={characterJobs}
           images={imageJobs}
