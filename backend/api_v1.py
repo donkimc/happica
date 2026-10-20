@@ -89,6 +89,7 @@ def _files(job: dict) -> list[dict]:
         out.append(("music", r["music"]["mp3"]))
     if (r.get("ambience") or {}).get("mp3"):
         out.append(("ambience", r["ambience"]["mp3"]))
+    out += [("scene_sfx", c["mp3"]) for scene in r.get("sfx") or [] for c in scene if c.get("mp3")]
     return [{"role": role, "path": path, "name": path.rsplit("/", 1)[-1]} for role, path in out]
 
 
@@ -324,6 +325,18 @@ async def cancel_job(job_id: str, request: Request):
 @router.post("/jobs/{job_id}/rerun", status_code=202, summary="Run a job again with the same settings")
 async def rerun_job(job_id: str, request: Request, req: Rerun = Rerun()):
     return public(await main.rerun_job(job_id, main.RerunRequest(keep_seed=req.keep_seed)), _base_url(request))
+
+
+@router.post("/jobs/{job_id}/scenes/{index}/regenerate", status_code=202,
+             summary="Redo one scene's picture (and its clip), optionally with a new image prompt")
+async def regenerate_scene(job_id: str, index: int, request: Request, req: main.RegenerateRequest = main.RegenerateRequest()):
+    return public(await main.regenerate_scene(job_id, index, req), _base_url(request))
+
+
+@router.post("/jobs/{job_id}/scenes/{index}/sfx/{cue}/regenerate", status_code=202,
+             summary="Redo one scene sound effect (another take, or a new description) and re-mix")
+async def regenerate_scene_sfx(job_id: str, index: int, cue: int, request: Request, req: main.SfxChange = main.SfxChange()):
+    return public(await main.regenerate_scene_sfx(job_id, index, cue, req), _base_url(request))
 
 
 @router.delete("/jobs/{job_id}", summary="Delete a finished job and its files")

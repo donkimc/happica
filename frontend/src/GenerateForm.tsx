@@ -1,6 +1,7 @@
 import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { Health, Job, JobSettings, listVoices, Voice } from "./api";
 import SoundPicker, { libraryTracks } from "./MusicPicker";
+import ScriptEditor from "./ScriptEditor";
 import SlidesEditor, { SlideItem } from "./SlidesEditor";
 import { estimateSeconds, formatDuration, matches, PRESETS } from "./presets";
 
@@ -57,6 +58,9 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
   const pictures = !musicVideo && settings.scene_mode === "slides";
   const aiNarration = pictures && settings.narrate && settings.slides_narration === "ai";
   const llm = !pictures && !musicVideo && settings.scene_mode === "llm";
+  const scripted = !pictures && !musicVideo && settings.scene_mode === "script";
+  const lines = !pictures && !musicVideo && !llm && !scripted;
+  const script = (settings.script ?? []).filter((sc) => sc.image_prompt.trim());
   const songs = libraryTracks(library);
   const songTrack = settings.song_track && songs.some((t) => t.value === settings.song_track) ? settings.song_track : songs[0]?.value ?? "";
   const songSeconds = (() => {
@@ -73,10 +77,12 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
     ? Math.max(2, Math.min(16, Math.round(songSeconds / Math.max(2, settings.clip_seconds))))
     : pictures
     ? slides.length
+    : scripted
+    ? script.length
     : llm
       ? settings.max_scenes
       : Math.min(settings.max_scenes, prompt.split("\n").filter((l) => l.trim()).length);
-  const ready = musicVideo ? !!songTrack : pictures ? slides.length > 0 : prompt.trim().length > 0;
+  const ready = musicVideo ? !!songTrack : pictures ? slides.length > 0 : scripted ? script.length > 0 && !!prompt.trim() : prompt.trim().length > 0;
 
   return (
     <section className="card" id="generate">
@@ -116,8 +122,8 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
       <div className="segmented" role="radiogroup" aria-label="Where the pictures come from">
         <button
           role="radio"
-          aria-checked={!llm && !pictures}
-          className={!llm && !pictures ? "on" : ""}
+          aria-checked={lines}
+          className={lines ? "on" : ""}
           onClick={() => set({ scene_mode: "lines" })}
         >
           One line per scene
@@ -138,8 +144,18 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
         >
           My pictures
         </button>
+        <button
+          role="radio"
+          aria-checked={scripted}
+          className={scripted ? "on" : ""}
+          onClick={() => set({ scene_mode: "script", narrate: true })}
+        >
+          My script
+        </button>
       </div>
       )}
+
+      {scripted && <ScriptEditor title={prompt} settings={settings} onTitle={onPrompt} onSettings={set} />}
 
       {pictures && onSlides && (
         <>
@@ -177,7 +193,7 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
         </>
       )}
 
-      {!pictures && !musicVideo && (
+      {!pictures && !musicVideo && !scripted && (
       <>
       <label htmlFor="prompt">
         {llm ? "Tell a story — the AI splits it into scenes and writes the narration" : "Describe your video — one line per scene"}
@@ -216,7 +232,9 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
           </label>
           {settings.character && (
             <span className="muted character-hint">
-              {llm
+              {scripted
+                ? `Write ${characters.find((c) => c.id === settings.character)?.settings.name as string} in the pictures where they appear; those get their face.`
+                : llm
                 ? `The AI writes ${characters.find((c) => c.id === settings.character)?.settings.name as string} into the story; scenes with them get their face.`
                 : `Write ${characters.find((c) => c.id === settings.character)?.settings.name as string} in the lines where they appear (or nowhere, to have them in every scene).`}
             </span>
@@ -237,9 +255,10 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
             <option value="768x512">768×512 (landscape)</option>
             <option value="512x768">512×768 (portrait)</option>
             <option value="512x512">512×512 (square)</option>
+            <option value="576x1024">576×1024 (9:16, TikTok)</option>
           </select>
         </label>
-        {!pictures && !musicVideo && (
+        {!pictures && !musicVideo && !scripted && (
         <label>
           {llm ? "Max scenes" : "Scenes"}
           <input
@@ -305,6 +324,13 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
           </select>
         </label>
       </div>
+      )}
+
+      {(lines || llm) && (
+        <label className="check">
+          <input type="checkbox" checked={!!settings.sfx_auto} onChange={(e) => set({ sfx_auto: e.target.checked })} />
+          Sound effects — the AI adds one to every scene
+        </label>
       )}
 
       {!musicVideo && (

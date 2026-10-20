@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { isActive, Job, JobSettings, outputUrl, SoundFields } from "./api";
+import { isActive, Job, JobSettings, outputUrl, SceneSfx, SoundFields } from "./api";
 import { DEFAULTS } from "./GenerateForm";
 import SoundPicker from "./MusicPicker";
 
@@ -10,13 +10,14 @@ interface Props {
   onEdit: () => void;
   onDelete: () => void;
   onRegenerate: (index: number, prompt: string) => void;
+  onSfx: (index: number, cue: number, prompt: string) => void;
   library: Job[];
   sfxLibrary: Job[];
   onChangeSound: (choice: SoundFields) => void;
   onNewAuto: (layer: "music" | "ambience") => void;
 }
 
-export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, onRegenerate, library, sfxLibrary, onChangeSound, onNewAuto }: Props) {
+export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, onRegenerate, onSfx, library, sfxLibrary, onChangeSound, onNewAuto }: Props) {
   const active = isActive(job);
   const result = job.result;
   const settings = { ...DEFAULTS, ...job.settings } as JobSettings;
@@ -135,6 +136,9 @@ export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, on
               narration={result.narration?.[i]}
               disabled={active || job.settings.scene_mode === "slides"}
               onRegenerate={(p) => onRegenerate(i, p)}
+              sfx={result.sfx?.[i] ?? []}
+              sfxDisabled={active || !result.video}
+              onSfx={(k, p) => onSfx(i, k, p)}
             />
           ))}
         </div>
@@ -162,9 +166,12 @@ interface SceneProps {
   narration?: string;
   disabled: boolean;
   onRegenerate: (prompt: string) => void;
+  sfx: SceneSfx[];
+  sfxDisabled: boolean;
+  onSfx: (cue: number, prompt: string) => void;
 }
 
-function Scene({ job, index, src, prompt, narration, disabled, onRegenerate }: SceneProps) {
+function Scene({ job, index, src, prompt, narration, disabled, onRegenerate, sfx, sfxDisabled, onSfx }: SceneProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(prompt);
 
@@ -207,6 +214,42 @@ function Scene({ job, index, src, prompt, narration, disabled, onRegenerate }: S
         </figcaption>
       )}
       {narration && narration !== prompt && <p className="narration">“{narration}”</p>}
+      {sfx.map((cue, k) => (
+        <Cue key={`${k}-${cue.seed}`} job={job} cue={cue} disabled={sfxDisabled} onChange={(p) => onSfx(k, p)} />
+      ))}
     </figure>
+  );
+}
+
+/** One scene sound effect: play it, get another take, or describe it differently. */
+function Cue({ job, cue, disabled, onChange }: { job: Job; cue: SceneSfx; disabled: boolean; onChange: (prompt: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(cue.prompt);
+  return (
+    <div className="cue-line">
+      <button
+        className="link play"
+        disabled={!cue.mp3}
+        aria-label={`Play ${cue.prompt}`}
+        onClick={() => cue.mp3 && new Audio(outputUrl(job, cue.mp3)).play()}
+      >
+        ▶
+      </button>
+      {editing ? (
+        <>
+          <input value={draft} maxLength={300} onChange={(e) => setDraft(e.target.value)} />
+          <button className="link" disabled={draft.trim().length < 2} onClick={() => { onChange(draft.trim() === cue.prompt ? "" : draft.trim()); setEditing(false); }}>
+            Make
+          </button>
+          <button className="link" onClick={() => setEditing(false)}>Cancel</button>
+        </>
+      ) : (
+        <>
+          <span className="muted">♪ {cue.prompt} · {cue.at}s</span>
+          <button className="link" disabled={disabled} onClick={() => onChange("")} title="Another take of the same sound">New take</button>
+          <button className="link" disabled={disabled} onClick={() => { setDraft(cue.prompt); setEditing(true); }}>Change</button>
+        </>
+      )}
+    </div>
   );
 }

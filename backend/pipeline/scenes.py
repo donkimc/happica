@@ -134,3 +134,30 @@ async def _english_prompts(scenes: list[dict], model: str) -> list[dict]:
         if t.get("image", "").strip() and not NON_LATIN.search(t["image"]):
             scenes[i] = {**scenes[i], "prompt": t["image"].strip(), "motion": t.get("motion", "").strip()}
     return scenes
+
+
+SFX_SYSTEM = """You are a sound designer for a short narrated video. For each scene, write ONE short English
+description (4-10 words) of a sound effect heard in it: a concrete sound source and action, e.g. "door creaks open
+slowly", "magical sparkle chime". Only sounds, no music, no speech. Use "" for a scene with nothing to hear.
+Answer only with JSON, one item per scene, in order."""
+
+
+async def suggest_sfx(shots: list[dict], model: str = OLLAMA_MODEL) -> list[str]:
+    """A sound effect per scene (sfx_auto), from its picture and narration."""
+    items = [{"scene": i + 1, "picture": s["prompt"], "narration": s["narration"]} for i, s in enumerate(shots)]
+    body = {
+        "model": model, "stream": False, "keep_alive": 0, "options": {"temperature": 0.5},
+        "messages": [{"role": "system", "content": SFX_SYSTEM},
+                     {"role": "user", "content": json.dumps({"scenes": items}, ensure_ascii=False)}],
+        "format": {"type": "object", "properties": {"sounds": {"type": "array", "items": {"type": "string"}}},
+                   "required": ["sounds"]},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            r = await client.post(f"{OLLAMA_URL}/api/chat", json=body)
+            r.raise_for_status()
+    except httpx.ConnectError:
+        raise RuntimeError(f"Ollama is not running at {OLLAMA_URL}; it suggests the sound effects (sfx_auto).")
+    sounds = [str(x).strip().strip('"')[:300] for x in json.loads(r.json()["message"]["content"]).get("sounds", [])]
+    sounds = [x if len(x) >= 2 and not NON_LATIN.search(x) else "" for x in sounds]
+    return (sounds + [""] * len(shots))[: len(shots)]

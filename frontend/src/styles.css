@@ -227,3 +227,17 @@ table.keys th { color: var(--muted); font-weight: 600; }
 .page-head h2 { margin: 0; }
 .guide-frame { width: 100%; height: calc(100vh - 170px); min-height: 480px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
 @media (max-width: 560px) { .menu-list { left: 0; right: auto; } } /* the header wraps: the ☰ button sits at the left */
+
+/* My script */
+.script fieldset { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+.script legend { font-size: 13px; color: var(--muted); padding: 0 4px; display: flex; gap: 10px; align-items: center; }
+.script .scene-tools { display: inline-flex; gap: 6px; }
+.script textarea { min-height: 0; }
+.script .name { width: 120px; flex: none; }
+.script .cue input[type="number"] { width: 64px; }
+.script label.small { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.script .paste { display: grid; gap: 8px; margin: 8px 0; }
+.cue-line { display: flex; align-items: center; gap: 6px; font-size: 12px; flex-wrap: wrap; margin-top: 4px; }
+.cue-line input { flex: 1; min-width: 120px; font-size: 12px; padding: 4px 6px; }
+.cue-line .play { font-size: 12px; }
+@media (max-width: 640px) { .script .name { width: 90px; } }

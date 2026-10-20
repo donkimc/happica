@@ -8,12 +8,13 @@ story (auto) or taken from the Music Studio library, and ducked under the narrat
 import asyncio
 import math
 import random
+import shutil
 from pathlib import Path
 
 from comfy_client import ComfyClient
 from config import OUTPUTS_DIR
 
-from . import assemble, captions, character, image, music, scenes, sfx, songwriter, tts, video, vision
+from . import assemble, captions, character, image, music, scenes, script, sfx, songwriter, tts, video, vision
 
 LEAD = 0.35  # narration starts this long after its scene appears
 TAIL = 0.4   # breathing room after the narration before the next scene's crossfade
@@ -115,6 +116,8 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
                     shot["narration"] = sl["text"].strip() or line  # anything the user wrote wins
     elif settings.get("scene_mode") == "musicvideo":
         shots, song_seconds = await _music_video_scenes(settings)
+    elif settings.get("scene_mode") == "script":  # written outside Happica: no story AI
+        shots = script.shots(settings)
     else:
         story = job["prompt"]
         if (ch := character.load(settings.get("character", ""))) and settings.get("scene_mode") == "llm":
@@ -153,7 +156,7 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
         for sl, out in zip(settings["slides"], image_paths):
             await asyncio.to_thread(_fit_image, OUTPUTS_DIR / sl["image"], out, settings["width"], settings["height"])
     else:
-        prompts = [s["prompt"] for s in shots]
+        prompts = [script.expand(s["prompt"], settings.get("characters")) for s in shots]
         ch = character.load(settings.get("character", ""))
         with_face = None
         if ch:
@@ -168,25 +171,67 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
     result.update(images=[_rel(job_dir, p) for p in image_paths], seeds=seeds)
     report("image", 1.0, result=result)
 
-    if settings.get("motion") == "none":
-        return result
+    # Per-scene sound effects: written in the script, or suggested by the AI (sfx_auto)
+    if settings.get("sfx_auto") and settings.get("scene_mode") in ("lines", "llm"):
+        report("choosing sound effects", 0.0)
+        for shot, sound in zip(shots, await scenes.suggest_sfx(shots)):
+            shot["sfx"] = [{"prompt": sound}] if sound else []
+    result["sfx"] = [[{"at": 0.15, "duration": 3.0, "volume": 0.6, **cue, "seed": seed + 1000 * (i + 1) + k}
+                      for k, cue in enumerate(shot.get("sfx") or [])] for i, shot in enumerate(shots)]
 
-    if settings.get("motion") == "ltx":
+    modes = script.modes(settings, len(shots))
+    if settings.get("motion") == "none" and all(m == "none" for m in modes):
+        return result  # images only
+    result["motion_modes"] = modes
+
+    if "ltx" in modes:
         await comfy.free()  # SDXL out, LTX in: both don't fit in 16 GB at once
 
     for i, shot in enumerate(shots):
         report("video", i / len(shots))
         p = _paths(job_dir, i)
         on_progress = lambda prog, i=i: report("video", (i + prog) / len(shots))
-        await video.animate(comfy, p["image"], _video_prompt(shot), settings, p["clip"], i,
+        await video.animate(comfy, p["image"], _video_prompt(shot), {**settings, "motion": modes[i]}, p["clip"], i,
                             seconds=result["durations"][i], seed=seed + i, on_progress=on_progress)
         result["clips"].append(_rel(job_dir, p["clip"]))
         report("video", (i + 1) / len(shots), result=result)
 
+    await make_sfx(job_dir, result, report, music_comfy)
     result["music"] = await _pick_music(job, job_dir, result, report, music_comfy)
     result["ambience"] = await _pick_ambience(job, job_dir, result, report, music_comfy)
     report("assemble", 0.0)
     result.update(await _assemble(job_dir, settings, result))
+    return result
+
+
+async def make_sfx(job_dir: Path, result: dict, report, music_comfy: ComfyClient) -> None:
+    """Generate the scene sound effects that don't have a file yet (all in one run), into outputs/<job>/sfx/.
+    Cues that already have their file are kept, so re-assembling or changing one cue doesn't redo the others."""
+    todo = [cue for cues in result.get("sfx") or [] for cue in cues
+            if not (cue.get("flac") and (OUTPUTS_DIR / cue["flac"]).is_file())]
+    if not todo:
+        return
+    report("sound effects", 0.0)
+    dirs = [job_dir / "sfx" / f"{cue['seed']}" for cue in todo]
+    takes = await sfx.generate_cues(music_comfy, [(c["prompt"], float(c["duration"]), c["seed"]) for c in todo], dirs,
+                                    f"{job_dir.name}_fx", lambda p: report("sound effects", p))
+    for cue, take in zip(todo, takes):
+        cue.update(flac=take["flac"], mp3=take["mp3"])
+    report("sound effects", 1.0, result=result)
+
+
+async def change_scene_sfx(job: dict, job_dir: Path, report, music_comfy: ComfyClient, index: int, k: int,
+                           prompt: str | None = None) -> dict:
+    """Make one scene sound effect again (a new take, or a new description), then re-mix the video."""
+    result = dict(job["result"])
+    cue = result["sfx"][index][k]
+    if cue.get("flac") and (old := (OUTPUTS_DIR / cue["flac"]).parent).parent == job_dir / "sfx":
+        shutil.rmtree(old, ignore_errors=True)
+    cue.update(seed=random.randrange(2**31), flac=None, mp3=None, **({"prompt": prompt} if prompt else {}))
+    await make_sfx(job_dir, result, report, music_comfy)
+    if result.get("video"):
+        report("assemble", 0.0)
+        result.update(await _assemble(job_dir, job["settings"], result))
     return result
 
 
@@ -207,17 +252,20 @@ async def regenerate_scene(job: dict, job_dir: Path, report, comfy: ComfyClient,
     p = _paths(job_dir, index)
     ch = character.load(settings.get("character", ""))
     face = bool(ch) and (result.get("with_face") or [True] * len(prompts))[index]
-    await image.generate(comfy, character.prompt_for(prompts[index], ch) if face else prompts[index], settings,
+    text = script.expand(prompts[index], settings.get("characters"))
+    await image.generate(comfy, character.prompt_for(text, ch) if face else text, settings,
                          p["image"], seed=seeds[index], on_progress=lambda prog: report(f"scene {index + 1} image", prog),
                          character=ch if face else None)
 
     # Only rebuild video if this job made one (an "images only" job or one that failed before video stays as is)
     if result.get("video"):
-        if settings.get("motion") == "ltx":
+        mode = (result.get("motion_modes") or script.modes(settings, len(prompts)))[index]
+        if mode == "ltx":
             await comfy.free()
         motion = (result.get("motion") or [""] * len(prompts))[index]
         durations = result.get("durations") or [settings.get("clip_seconds", 3)] * len(prompts)
-        await video.animate(comfy, p["image"], _video_prompt({"prompt": prompts[index], "motion": motion}), settings,
+        await video.animate(comfy, p["image"], _video_prompt({"prompt": prompts[index], "motion": motion}),
+                            {**settings, "motion": mode},
                             p["clip"], index, seconds=durations[index], seed=seeds[index],
                             on_progress=lambda prog: report(f"scene {index + 1} clip", prog))
         report("assemble", 0.0)
@@ -312,11 +360,12 @@ async def _assemble(job_dir: Path, settings: dict, result: dict) -> dict:
     silent = await assemble.concat(clips, durations, job_dir / "video_only.mp4", fade)
     total = _total(settings, result)
 
-    narration_track, cues = None, []
+    narration_track, cues, speech = None, [], []
+    starts = assemble.scene_starts(durations, fade)
     if result.get("audio"):
-        starts = assemble.scene_starts(durations, fade)
         audio = [p if (p := _paths(job_dir, i)["audio"]).is_file() else None for i in range(n)]
         narration_track = assemble.mix_narration(audio, starts, LEAD, total, job_dir / "narration.wav")
+        speech = [(starts[i] + LEAD, starts[i] + LEAD + result["speech"][i]) for i in range(n) if result["speech"][i]]
         if settings.get("subtitles", "off") != "off":
             for i, line in enumerate(result["narration"]):
                 cues += captions.cues_for(line, starts[i] + LEAD, result["speech"][i], captions.max_chars_for(settings["width"]))
@@ -329,7 +378,10 @@ async def _assemble(job_dir: Path, settings: dict, result: dict) -> dict:
         beds.append((OUTPUTS_DIR / result["ambience"]["track"], level(settings, "ambience_volume", 0.35, narrated)))
     final = await assemble.finalize(silent, job_dir / "final.mp4", total, narration_track, cues,
                                     burn=settings.get("subtitles") == "burn" and captions.can_burn(cues),
-                                    size=(settings["width"], settings["height"]), beds=beds)
+                                    size=(settings["width"], settings["height"]), beds=beds, speech=speech,
+                                    sfx=[(OUTPUTS_DIR / c["flac"], starts[i] + c["at"], c["duration"], c["volume"])
+                                         for i, scene in enumerate(result.get("sfx") or []) for c in scene
+                                         if c.get("flac")])
     silent.unlink()
     if not cues:
         return {"video": _rel(job_dir, final), "subtitles": None, "subtitles_vtt": None}

@@ -1,0 +1,173 @@
+import { useState } from "react";
+import { JobSettings, ScriptScene, SfxCue } from "./api";
+
+interface Props {
+  title: string;
+  settings: JobSettings;
+  onTitle: (t: string) => void;
+  onSettings: (patch: Partial<JobSettings>) => void;
+}
+
+const MAX_SCENES = 16;
+const blank = (): ScriptScene => ({ image_prompt: "", narration: "", sfx: [] });
+
+/** Turn a story file (the autohappymusica format, or the API's own script) into editor fields. */
+export function parseStory(text: string): { title?: string; patch: Partial<JobSettings> } {
+  const data = JSON.parse(text);
+  const scenes = (Array.isArray(data) ? data : data.scenes ?? data.script) as Record<string, unknown>[];
+  if (!Array.isArray(scenes) || !scenes.length) throw new Error("No scenes found — expected a \"scenes\" list");
+  const cues = (sfx: unknown): SfxCue[] =>
+    (Array.isArray(sfx) ? sfx : sfx ? [sfx] : []).map((c) => (typeof c === "string" ? { prompt: c } : (c as SfxCue)));
+  const script: ScriptScene[] = scenes.slice(0, MAX_SCENES).map((s) => ({
+    image_prompt: String(s.image_prompt ?? s.image ?? s.prompt ?? ""),
+    narration: String(s.narration ?? s.text ?? ""),
+    motion: s.motion_hint ? String(s.motion_hint) : typeof s.motion === "string" && !["kenburns", "ltx", "none"].includes(s.motion) ? s.motion : "",
+    motion_mode: (s.motion_mode ?? (["kenburns", "ltx", "none"].includes(String(s.motion)) ? s.motion : null)) as ScriptScene["motion_mode"],
+    sfx: cues(s.sfx),
+  }));
+  const patch: Partial<JobSettings> = { script, scene_mode: "script", narrate: script.some((s) => s.narration.trim()) };
+  if (!Array.isArray(data)) {
+    if (data.characters) patch.characters = data.characters;
+    if (data.style) patch.style = data.style;
+    if (data.voice) patch.voice = data.voice;
+    if (["kenburns", "ltx", "none"].includes(data.motion)) patch.motion = data.motion;
+  }
+  return { title: Array.isArray(data) ? undefined : data.title, patch };
+}
+
+/** My script: write every scene yourself — picture, narration, motion and sound effects. Nothing is rewritten by AI. */
+export default function ScriptEditor({ title, settings, onTitle, onSettings }: Props) {
+  const script = settings.script?.length ? settings.script : [blank()];
+  const characters = Object.entries(settings.characters ?? {});
+  const [pasting, setPasting] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const setScript = (next: ScriptScene[]) => onSettings({ script: next });
+  const update = (i: number, patch: Partial<ScriptScene>) => setScript(script.map((s, k) => (k === i ? { ...s, ...patch } : s)));
+  const move = (i: number, d: number) => {
+    const next = [...script];
+    [next[i], next[i + d]] = [next[i + d], next[i]];
+    setScript(next);
+  };
+  const setCharacters = (rows: [string, string][]) => onSettings({ characters: Object.fromEntries(rows) });
+  const updateCue = (i: number, k: number, patch: Partial<SfxCue>) =>
+    update(i, { sfx: script[i].sfx.map((c, j) => (j === k ? { ...c, ...patch } : c)) });
+
+  return (
+    <div className="script">
+      <div className="row tight-top">
+        <label className="grow">
+          Title
+          <input value={title} maxLength={200} placeholder="아기도깨비 똘이와 요술 방망이" onChange={(e) => onTitle(e.target.value)} />
+        </label>
+        <button className="secondary inline" onClick={() => setPasting((p) => !p)}>
+          {pasting ? "Close" : "Paste a story file (JSON)"}
+        </button>
+      </div>
+      {pasting && (
+        <div className="paste">
+          <textarea rows={6} value={pasted} placeholder='{"title": "…", "characters": {…}, "scenes": [{"image": "…", "narration": "…", "sfx": "…"}]}'
+                    onChange={(e) => setPasted(e.target.value)} />
+          <button
+            disabled={!pasted.trim()}
+            onClick={() => {
+              try {
+                const { title: t, patch } = parseStory(pasted);
+                if (t) onTitle(t);
+                onSettings(patch);
+                setPasting(false);
+                setPasted("");
+                setError(null);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e));
+              }
+            }}
+          >
+            Fill in the script
+          </button>
+        </div>
+      )}
+      {error && <p className="error">{error}</p>}
+
+      <fieldset className="characters-list">
+        <legend>Characters — their look is spelled out in every picture that names them</legend>
+        {characters.map(([name, look], i) => (
+          <div className="row tight" key={i}>
+            <input className="name" value={name} placeholder="Ttori" maxLength={40}
+                   onChange={(e) => setCharacters(characters.map((c, k) => (k === i ? [e.target.value, c[1]] : c)))} />
+            <input className="grow" value={look} placeholder="a tiny baby dokkaebi goblin with sky-blue skin, one yellow horn…" maxLength={300}
+                   onChange={(e) => setCharacters(characters.map((c, k) => (k === i ? [c[0], e.target.value] : c)))} />
+            <button className="link" onClick={() => setCharacters(characters.filter((_, k) => k !== i))}>Remove</button>
+          </div>
+        ))}
+        <button className="link" disabled={characters.length >= 12} onClick={() => setCharacters([...characters, ["", ""]])}>
+          + Add character
+        </button>
+      </fieldset>
+
+      {script.map((scene, i) => (
+        <fieldset className="script-scene" key={i}>
+          <legend>
+            Scene {i + 1}
+            <span className="scene-tools">
+              <button className="link" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up">↑</button>
+              <button className="link" disabled={i === script.length - 1} onClick={() => move(i, 1)} aria-label="Move down">↓</button>
+              <button className="link" disabled={script.length === 1} onClick={() => setScript(script.filter((_, k) => k !== i))}>Remove</button>
+            </span>
+          </legend>
+          <label>
+            Picture (English)
+            <textarea rows={2} value={scene.image_prompt} maxLength={1000} placeholder="Ttori holding a golden magic club on a hill at sunrise"
+                      onChange={(e) => update(i, { image_prompt: e.target.value })} />
+          </label>
+          <label>
+            Narration (spoken exactly as written)
+            <textarea rows={2} value={scene.narration} maxLength={600} placeholder="깊은 산속 작은 마을에 아기도깨비 똘이가 살았어요."
+                      onChange={(e) => update(i, { narration: e.target.value })} />
+          </label>
+          <div className="row tight">
+            <label>
+              Motion
+              <select value={scene.motion_mode ?? ""} onChange={(e) => update(i, { motion_mode: (e.target.value || null) as ScriptScene["motion_mode"] })}>
+                <option value="">Same as the video</option>
+                <option value="kenburns">Pan &amp; zoom</option>
+                <option value="ltx">AI motion (slow)</option>
+                <option value="none">Still picture</option>
+              </select>
+            </label>
+            {(scene.motion_mode ?? settings.motion) === "ltx" && (
+              <label className="grow">
+                What moves
+                <input value={scene.motion ?? ""} maxLength={300} placeholder="the club sparkles, camera slowly pushes in"
+                       onChange={(e) => update(i, { motion: e.target.value })} />
+              </label>
+            )}
+          </div>
+          {scene.sfx.map((cue, k) => (
+            <div className="row tight cue" key={k}>
+              <input className="grow" value={cue.prompt} maxLength={300} placeholder="magical sparkle chime"
+                     onChange={(e) => updateCue(i, k, { prompt: e.target.value })} />
+              <label className="small">
+                at
+                <input type="number" min={0} max={60} step={0.1} value={cue.at ?? 0.15} onChange={(e) => updateCue(i, k, { at: Number(e.target.value) })} />
+              </label>
+              <label className="small">
+                sec
+                <input type="number" min={1} max={10} step={0.5} value={cue.duration ?? 3} onChange={(e) => updateCue(i, k, { duration: Number(e.target.value) })} />
+              </label>
+              <button className="link" onClick={() => update(i, { sfx: scene.sfx.filter((_, j) => j !== k) })}>Remove</button>
+            </div>
+          ))}
+          <button className="link" disabled={scene.sfx.length >= 4} onClick={() => update(i, { sfx: [...scene.sfx, { prompt: "" }] })}>
+            + Sound effect
+          </button>
+        </fieldset>
+      ))}
+      <button className="secondary inline" disabled={script.length >= MAX_SCENES} onClick={() => setScript([...script, blank()])}>
+        + Add scene
+      </button>
+      <span className="muted"> {script.length} of {MAX_SCENES} scenes</span>
+    </div>
+  );
+}

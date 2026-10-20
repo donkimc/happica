@@ -54,9 +54,12 @@ def mix_narration(audio: list[Path | None], starts: list[float], lead: float, to
 
 async def finalize(video: Path, out: Path, total: float, narration: Path | None = None,
                    cues: list[captions.Cue] | None = None, burn: bool = False,
-                   size: tuple[int, int] = (768, 512), beds: list[tuple[Path, float]] | None = None) -> Path:
+                   size: tuple[int, int] = (768, 512), beds: list[tuple[Path, float]] | None = None,
+                   sfx: list[tuple[Path, float, float, float]] | None = None,
+                   speech: list[tuple[float, float]] | None = None) -> Path:
     """Add narration, background beds (music, ambience — each looped to length at its own gain, and ducked
-    together under the narration) and subtitles.
+    together under the narration), sound effects (path, start, length, gain — placed at their time; `speech` is
+    when the narration talks, where they play 6 dB lower) and subtitles.
 
     Subtitles go in as a soft track, and are also burned into the picture when `burn`.
     """
@@ -84,12 +87,35 @@ async def finalize(video: Path, out: Path, total: float, narration: Path | None 
             # Duck: the music drops whenever the narration speaks, then comes back up between lines
             graph.append(f"[{voice}]{stereo},asplit=2[voice][key]")
             graph.append("[music][key]sidechaincompress=threshold=0.02:ratio=6:attack=15:release=350[ducked]")
-            graph.append("[voice][ducked]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95[mix]")
+            layers = ["[voice]", "[ducked]"]
         else:
-            graph.append("[music]alimiter=limit=0.95[mix]")
+            layers = ["[music]"]
+    elif narration and sfx:
+        graph.append(f"[{voice}]{stereo}[voice]")
+        layers = ["[voice]"]
+    else:
+        layers = []
+
+    if sfx:
+        # Sound-effect bus: each cue at its own time, NOT ducked like the music, but ~-6 dB while someone speaks
+        for k, (path, start, length, gain) in enumerate(sfx):
+            args += ["-i", str(path)]
+            ms = max(0, round(start * 1000))
+            graph.append(f"[{n_inputs}:a]atrim=0:{length:.3f},asetpts=PTS-STARTPTS,{stereo},"
+                         f"afade=t=out:st={max(0.0, length - 0.3):.3f}:d=0.3,volume={gain:.3f},adelay={ms}|{ms}[fx{k}]")
+            n_inputs += 1
+        graph.append("".join(f"[fx{k}]" for k in range(len(sfx))) + f"amix=inputs={len(sfx)}:normalize=0,"
+                     f"apad=whole_dur={total:.3f}[fxmix]")
+        talking = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in speech or [])
+        graph.append(f"[fxmix]volume='if({talking},0.5,1)':eval=frame[fxbus]" if talking else "[fxmix]anull[fxbus]")
+        layers.append("[fxbus]")
+
+    if narration and not beds and not sfx:
+        audio_out = voice  # narration alone: as is
+    elif layers:
+        graph.append("".join(layers) + (f"amix=inputs={len(layers)}:normalize=0:duration=longest," if len(layers) > 1 else "")
+                     + "alimiter=limit=0.95[mix]")
         audio_out = "[mix]"
-    elif narration:
-        audio_out = voice
 
     if cues and burn:
         # Overlay one caption image per cue, each enabled only during its time window

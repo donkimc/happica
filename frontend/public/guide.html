@@ -167,6 +167,16 @@ scripts/start.sh</code></pre>
   <p>Each line you type becomes one scene, and the line is used directly as the image description. Use this when you know exactly what each shot should show. If narration is on, the line is also what gets spoken.</p>
   <h3>Story — AI writes the scenes</h3>
   <p>Write in plain prose. A local language model (Ollama) splits it into scenes and writes three things for each: a detailed <em>image prompt</em>, a <em>motion</em> hint for AI motion, and a line of <em>narration</em>. You'll see the narration in quotes under each scene once the job runs.</p>
+  <p>In both modes, tick <strong>Sound effects — the AI adds one to every scene</strong> to have a short effect (a door creak, birds, a magic chime) picked for each scene and mixed in.</p>
+  <h3>My script — you write every scene</h3>
+  <p>For stories written elsewhere (by you, or by Claude through the API). No story AI runs: each scene has</p>
+  <ul>
+    <li><strong>Picture</strong> — an English image description.</li>
+    <li><strong>Narration</strong> — spoken exactly as written, in any voice language (Korean voices: <code>st-ko-F1</code>…).</li>
+    <li><strong>Motion</strong> — the video's motion, or its own: pan &amp; zoom, AI motion (LTX) or a still picture. One video can mix them, e.g. AI motion only for the two key scenes.</li>
+    <li><strong>Sound effects</strong> — up to 4 per scene: what is heard, when (seconds after the scene appears) and how long (1–10 s). They play over the music without being ducked, and 6 dB lower while the narrator speaks.</li>
+  </ul>
+  <p><strong>Characters</strong> (name → look) keep cartoon characters consistent: wherever a picture names <em>Ttori</em>, it becomes <em>Ttori (a tiny baby dokkaebi with sky-blue skin, one yellow horn…)</em>, so every scene describes them the same way. <strong>Paste a story file</strong> fills the whole form from JSON (<code>title</code>, <code>style</code>, <code>voice</code>, <code>characters</code>, <code>scenes</code> with <code>image</code>, <code>narration</code>, <code>sfx</code>).</p>
 
   <h2 id="settings">All the settings</h2>
   <div class="table-wrap">
@@ -197,6 +207,7 @@ scripts/start.sh</code></pre>
         <tr><td><strong>Re-run</strong></td><td>Makes a new video from the same text and settings with new seeds — different images.</td></tr>
         <tr><td><strong>Re-run, same seed</strong></td><td>Reproduces the same images exactly. Handy after changing nothing but, say, the voice.</td></tr>
         <tr><td><strong>Edit &amp; re-run</strong></td><td>Loads the text and settings back into the form so you can tweak them and generate again.</td></tr>
+        <tr><td><strong>▶ / New take / Change</strong> (under a scene's sound effect)</td><td>Play the effect, make another take of it, or describe it differently. Only that effect is made again (~10 s) and the soundtrack re-mixed.</td></tr>
         <tr><td><strong>Change sound</strong></td><td>Swap the background music and ambience (Off, Auto, or from your libraries) or change their levels. Only the soundtrack is rebuilt — a few seconds for library picks or level changes, 1–2 minutes for a new Auto score. The lines under the video show what is playing.</td></tr>
         <tr><td><strong>Delete</strong></td><td>Removes the job and all its files.</td></tr>
         <tr><td><strong>Cancel</strong></td><td>Stops a queued or running job.</td></tr>
@@ -552,7 +563,7 @@ My request:</pre>
     <table>
       <thead><tr><th>Call</th><th>What it does</th></tr></thead>
       <tbody>
-        <tr><td><code>POST /videos</code></td><td>A video. <code>scene_mode</code>: <code>lines</code> (one line per scene), <code>llm</code> (story — AI writes the scenes), <code>slides</code> (your pictures, upload first), <code>musicvideo</code> (with <code>song_track</code>). Same options as the Story Video form: narration, voice, subtitles, motion, music, ambience, character…</td></tr>
+        <tr><td><code>POST /videos</code></td><td>A video. <code>scene_mode</code>: <code>lines</code> (one line per scene), <code>llm</code> (story — AI writes the scenes), <code>slides</code> (your pictures, upload first), <code>musicvideo</code> (with <code>song_track</code>), <code>script</code> (your own scenes: <code>script</code> = list of <code>{image_prompt, narration, motion, motion_mode, sfx: [{prompt, at, duration, volume}]}</code>, plus <code>characters</code> = name → look). <code>sfx_auto: true</code> adds AI-picked effects in lines/story modes. Same options as the Story Video form: narration, voice, subtitles, motion, music, ambience, character…</td></tr>
         <tr><td><code>POST /images</code></td><td>1–4 images (prompt, style, size, character)</td></tr>
         <tr><td><code>POST /music</code></td><td>A song or instrumental — and <code>POST /music/draft</code> to let the AI write the lyrics first</td></tr>
         <tr><td><code>POST /sfx</code></td><td>A sound effect or seamless ambience loop</td></tr>
@@ -564,6 +575,7 @@ My request:</pre>
         <tr><td><code>GET /jobs/{id}</code></td><td>Status, progress and <code>files</code> (each with a <code>role</code> — video, audio, image, subtitles… — and a download <code>url</code>)</td></tr>
         <tr><td><code>GET /jobs/{id}/wait?timeout=600</code></td><td>Waits until the job is done (or the timeout passes) and returns it — the simplest way to run jobs one after another</td></tr>
         <tr><td><code>GET /jobs?kind=video&amp;state=done</code></td><td>List jobs (newest first)</td></tr>
+        <tr><td><code>POST /jobs/{id}/scenes/{i}/regenerate</code>, <code>/scenes/{i}/sfx/{k}/regenerate</code></td><td>Redo one scene's picture (optional new <code>prompt</code>), or one of its sound effects (another take, or a new <code>prompt</code>); the video is rebuilt</td></tr>
         <tr><td><code>POST /jobs/{id}/cancel</code>, <code>/rerun</code>, <code>DELETE /jobs/{id}</code></td><td>Cancel, run again, delete</td></tr>
         <tr><td><code>GET /voices</code>, <code>/music/options</code>, <code>/health</code></td><td>Voice ids, music keys/languages, engine status</td></tr>
       </tbody>

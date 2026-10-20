@@ -10,11 +10,34 @@ export interface JobResult {
   music?: { source: "auto" | "library"; track: string; mp3?: string; title: string; tags?: string } | null;
   ambience?: { source: "auto" | "library"; track: string; mp3?: string; title: string } | null;
   seeds?: (number | null)[];
+  sfx?: SceneSfx[][]; // per scene: its sound effects
+  motion_modes?: ("kenburns" | "ltx" | "none")[];
   images: string[];
   clips: string[];
   audio?: string[];
   video: string | null;
   seed?: number;
+}
+
+export interface SfxCue {
+  prompt: string;
+  at?: number; // seconds after the scene appears
+  duration?: number;
+  volume?: number;
+}
+
+export interface SceneSfx extends Required<SfxCue> {
+  seed: number;
+  mp3?: string | null;
+  flac?: string | null;
+}
+
+export interface ScriptScene {
+  image_prompt: string;
+  motion?: string;
+  narration: string;
+  sfx: SfxCue[];
+  motion_mode?: "kenburns" | "ltx" | "none" | null;
 }
 
 export interface Track {
@@ -111,7 +134,10 @@ export interface JobSettings {
   motion: "none" | "kenburns" | "ltx";
   style: string;
   clip_seconds: number;
-  scene_mode: "lines" | "llm" | "slides" | "musicvideo";
+  scene_mode: "lines" | "llm" | "slides" | "musicvideo" | "script";
+  script?: ScriptScene[]; // My script: scenes written outside Happica
+  characters?: Record<string, string>; // name → look, spelled out in every picture prompt that names them
+  sfx_auto?: boolean; // lines/story: the AI adds a sound effect to every scene
   song_track?: string;
   character?: string; // a character job id
   slides?: { image: string; text: string }[];
@@ -193,6 +219,8 @@ export const createJob = (prompt: string, settings: JobSettings) =>
 export const cancelJob = (id: string) => post(`/api/jobs/${id}/cancel`).then((r) => json<Job>(r));
 export const rerunJob = (id: string, keepSeed = false) =>
   post(`/api/jobs/${id}/rerun`, { keep_seed: keepSeed }).then((r) => json<Job>(r));
+export const regenerateSceneSfx = (id: string, index: number, cue: number, prompt?: string) =>
+  post(`/api/jobs/${id}/scenes/${index}/sfx/${cue}/regenerate`, { prompt: prompt || null }).then((r) => json<Job>(r));
 export const regenerateScene = (id: string, index: number, prompt?: string) =>
   post(`/api/jobs/${id}/scenes/${index}/regenerate`, { prompt: prompt || null }).then((r) => json<Job>(r));
 export type SoundFields = Pick<

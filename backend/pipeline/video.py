@@ -1,6 +1,7 @@
 """Image → video clip.
 
 kenburns: slow zoom/pan over the still with ffmpeg (under a second per clip).
+none:     the still held as is (one scene of a script that mixes motions).
 ltx: AI motion with LTX-Video 2B (distilled) through ComfyUI (minutes per clip on an M2).
 """
 import copy
@@ -40,7 +41,18 @@ async def animate(comfy: ComfyClient, image: Path, prompt: str, settings: dict, 
         return await ken_burns(image, settings, out_path, index, seconds)
     if motion == "ltx":
         return await ltx(comfy, image, prompt, settings, out_path, seconds, seed, on_progress)
+    if motion == "none":
+        return await still(image, settings, out_path, seconds)
     raise ValueError(f"Unknown motion '{motion}'")
+
+
+async def still(image: Path, settings: dict, out_path: Path, seconds: float) -> Path:
+    """The picture held without camera movement (a script scene with motion_mode "none")."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    vf = f"scale={settings['width']}:{settings['height']}:flags=lanczos,fps={FPS},format=yuv420p"
+    await ffmpeg.run("-loop", "1", "-i", str(image), "-vf", vf, "-t", f"{seconds:.3f}", "-r", str(FPS), *ffmpeg.ENCODE,
+                     str(out_path))
+    return out_path
 
 
 async def ken_burns(image: Path, settings: dict, out_path: Path, index: int, seconds: float) -> Path:

@@ -105,6 +105,51 @@ async def generate(comfy: ComfyClient, prompt: str, seconds: float, loop: bool, 
     return takes
 
 
+CUE_BRANCH = ("positive", "latent", "sampler", "decode", "save")  # per cue; the models and negative are shared
+
+
+async def generate_cues(comfy: ComfyClient, cues: list[tuple[str, float, int]], out_dirs: list[Path], name: str,
+                        report=lambda progress: None) -> list[dict]:
+    """Several one-shot effects (prompt, seconds, seed) in ONE ComfyUI run, so the models load once (ComfyUI runs
+    with --cache-none). Each goes to its out_dir as s1.flac + s1.mp3; returns their takes like generate()."""
+    base = _workflow("", 1, 1, 0, name)
+    wf = {nid: node for nid, node in base.items() if nid not in CUE_BRANCH}
+    for i, (prompt, seconds, seed) in enumerate(cues):
+        branch = {f"{nid}_{i}": copy.deepcopy(base[nid]) for nid in CUE_BRANCH}
+        for node in branch.values():
+            for key, value in node["inputs"].items():
+                if isinstance(value, list) and value[0] in CUE_BRANCH:
+                    node["inputs"][key] = [f"{value[0]}_{i}", value[1]]
+        branch[f"positive_{i}"]["inputs"]["text"] = prompt
+        branch[f"latent_{i}"]["inputs"]["seconds"] = seconds
+        branch[f"sampler_{i}"]["inputs"]["seed"] = seed
+        branch[f"save_{i}"]["inputs"]["filename_prefix"] = f"happica/{name}_{i}"
+        wf.update(branch)
+
+    done: dict[int, float] = {}
+
+    def progress(value: int, total: int, node: str | None):
+        if node and node.startswith("sampler_"):
+            done[int(node.rsplit("_", 1)[1])] = value / total
+            report(sum(done.values()) / len(cues) * 0.9)
+
+    outputs = await comfy.run(wf, progress)
+    rel = lambda p: str(p.relative_to(OUTPUTS_DIR))
+    takes = []
+    for i, ((prompt, seconds, seed), out_dir) in enumerate(zip(cues, out_dirs)):
+        files = outputs.get(f"save_{i}", {}).get("audio", [])
+        if not files:
+            raise RuntimeError(f"Stable Audio returned no audio for sound effect {i + 1}")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        raw = out_dir / "s1.raw.flac"
+        raw.write_bytes(await comfy.download(files[0]["filename"], files[0]["subfolder"], files[0]["type"]))
+        flac, mp3 = out_dir / "s1.flac", out_dir / "s1.mp3"
+        duration = await _master(raw, False, flac, mp3)
+        takes.append({"mp3": rel(mp3), "flac": rel(flac), "duration": round(duration, 2), "seed": seed})
+    report(1.0)
+    return takes
+
+
 async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
     """A Sound Effects job: 1–2 takes of one sound."""
     s = job["settings"]

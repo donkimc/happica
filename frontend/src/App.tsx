@@ -13,6 +13,7 @@ import {
   JobSettings,
   listJobs,
   regenerateScene,
+  regenerateSceneSfx,
   regenerateSound,
   rerunJob,
   watchJob,
@@ -270,6 +271,15 @@ export default function App() {
                     settings.theme?.trim().slice(0, 80) || slides.find((sl) => sl.text.trim())?.text.slice(0, 80) || `My pictures (${slides.length})`,
                     { ...settings, slides },
                   )
+                : settings.scene_mode === "script"
+                ? await createJob(prompt, {
+                    ...settings,
+                    // empty scenes and sound rows left in the editor are dropped
+                    script: (settings.script ?? [])
+                      .filter((sc) => sc.image_prompt.trim())
+                      .map((sc) => ({ ...sc, sfx: sc.sfx.filter((c) => c.prompt.trim().length >= 2) })),
+                    characters: Object.fromEntries(Object.entries(settings.characters ?? {}).filter(([n, l]) => n.trim() && l.trim())),
+                  })
                 : await createJob(prompt, settings),
             ),
           )
@@ -286,7 +296,7 @@ export default function App() {
           onEdit={() => {
             // Story mode: the original story. Line mode: the current scene prompts, so edits made
             // while regenerating single scenes carry over.
-            const story = selected.settings.scene_mode === "llm";
+            const story = selected.settings.scene_mode === "llm" || selected.settings.scene_mode === "script";
             if (selected.settings.scene_mode === "slides") setSlides(selected.settings.slides ?? []);
             else if (selected.settings.scene_mode === "musicvideo") setPrompt(prompt);
             else setPrompt((!story && selected.result?.scenes.join("\n")) || selected.prompt);
@@ -311,6 +321,7 @@ export default function App() {
             })
           }
           onRegenerate={(index, p) => act(async () => upsert(await regenerateScene(selected.id, index, p)))}
+          onSfx={(index, cue, p) => act(async () => upsert(await regenerateSceneSfx(selected.id, index, cue, p)))}
           library={musicJobs}
           sfxLibrary={sfxJobs}
           onChangeSound={(choice) => act(async () => upsert(await changeSound(selected.id, choice)))}

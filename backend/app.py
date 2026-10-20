@@ -126,8 +126,25 @@ class Slide(BaseModel):
     text: str = Field(default="", max_length=400)  # narration / caption for this slide
 
 
+class SfxCue(BaseModel):
+    prompt: str = Field(min_length=2, max_length=300, description="What is heard, in English, e.g. \"magical sparkle chime\"")
+    at: float = Field(default=0.15, ge=0, le=60, description="Seconds after the scene appears")
+    duration: float = Field(default=3, ge=1, le=10, description="Length of the sound, seconds")
+    volume: float = Field(default=0.6, ge=0, le=1, description="Level relative to the narration")
+
+
+class ScriptScene(BaseModel):
+    image_prompt: str = Field(min_length=2, max_length=1000,
+                              description="English picture description; character names are expanded with their look")
+    motion: str = Field(default="", max_length=300, description="What moves (used by AI motion)")
+    narration: str = Field(default="", max_length=600, description="Spoken exactly as written")
+    sfx: list[SfxCue] = Field(default_factory=list, max_length=4, description="Sound effects in this scene")
+    motion_mode: str | None = Field(default=None, pattern="^(kenburns|ltx|none)$",
+                                    description="Overrides the job's motion for this scene; none = a still picture")
+
+
 class JobRequest(BaseModel):
-    prompt: str = Field(min_length=1)
+    prompt: str = Field(min_length=1, description="The idea or story; in script mode, the video's title")
     width: int = 768
     height: int = 512
     max_scenes: int = Field(default=4, ge=1, le=12)
@@ -135,7 +152,12 @@ class JobRequest(BaseModel):
     clip_seconds: float = Field(default=3, ge=1, le=10)
     fade: float = Field(default=0.5, ge=0, le=2)
     style: str = ""
-    scene_mode: str = Field(default="lines", pattern="^(lines|llm|slides|musicvideo)$")
+    scene_mode: str = Field(default="lines", pattern="^(lines|llm|slides|musicvideo|script)$")
+    script: list[ScriptScene] = Field(default_factory=list, max_length=16,
+                                      description="script mode: the scenes, written outside Happica (no story AI)")
+    characters: dict[str, str] = Field(default_factory=dict, max_length=12,
+                                       description="Name → look; every image prompt naming a character gets the look spelled out")
+    sfx_auto: bool = Field(default=False, description="lines/llm modes: the AI adds a sound effect to every scene")
     song_track: str = ""  # musicvideo: a Music library take's .flac under outputs/
     character: str = ""  # a character id: scenes that name them get their face
     slides: list[Slide] = Field(default_factory=list, max_length=30)
@@ -208,6 +230,14 @@ async def create_job(req: JobRequest):
         # The song is the soundtrack, at full level (nothing to duck under); no narration or subtitles
         req.music, req.music_track, req.music_title = "library", req.song_track, song["settings"].get("title", "")
         req.music_volume, req.narrate, req.subtitles = 0.4, False, "off"
+    for name, look in req.characters.items():
+        if not 1 <= len(name.strip()) <= 40 or len(look) > 300:
+            raise HTTPException(400, "Character names are 1-40 characters and looks at most 300")
+    if req.scene_mode == "script":
+        if not req.script:
+            raise HTTPException(400, "Add at least one scene to the script")
+        if "narrate" not in req.model_fields_set:  # a script with narration is meant to be spoken
+            req.narrate = any(s.narration.strip() for s in req.script)
     if req.scene_mode == "slides":
         if not req.slides:
             raise HTTPException(400, "Add at least one image")
@@ -459,6 +489,23 @@ async def regenerate_scene(job_id: str, index: int, req: RegenerateRequest = Reg
         raise HTTPException(400, "scene has no image to regenerate")
     task = lambda j, job_dir, report: pipeline.regenerate_scene(j, job_dir, report, comfy, index, req.prompt)
     return runner.enqueue(job_id, task, stage=f"scene {index + 1}")
+
+
+class SfxChange(BaseModel):
+    prompt: str | None = Field(default=None, min_length=2, max_length=300,
+                               description="A new description; omit for another take of the same sound")
+
+
+@app.post("/api/jobs/{job_id}/scenes/{index}/sfx/{cue}/regenerate")
+async def regenerate_scene_sfx(job_id: str, index: int, cue: int, req: SfxChange = SfxChange()):
+    """Make one scene sound effect again and re-mix the video; nothing else is redone."""
+    job = _get_or_404(job_id)
+    _require_idle(job)
+    scenes_sfx = (job["result"] or {}).get("sfx") or []
+    if not 0 <= index < len(scenes_sfx) or not 0 <= cue < len(scenes_sfx[index]):
+        raise HTTPException(400, "That scene has no such sound effect")
+    task = lambda j, job_dir, report: pipeline.change_scene_sfx(j, job_dir, report, music_comfy, index, cue, req.prompt)
+    return runner.enqueue(job_id, task, stage=f"scene {index + 1} sound")
 
 
 @app.delete("/api/jobs/{job_id}")
