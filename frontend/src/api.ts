@@ -144,8 +144,10 @@ export interface Voice {
   gender: "female" | "male";
 }
 
-// turbo = SDXL-Turbo (~5 s a picture); flux = FLUX.1-schnell (~4–5 min, follows descriptions, cleaner eyes; no characters)
-export type ImageModel = "turbo" | "flux";
+// turbo = SDXL-Turbo, lightning = SDXL-Lightning (both ~5 s a picture, work with characters);
+// flux = FLUX.1-schnell, zimage = Z-Image Turbo (minutes a picture, follow descriptions closely; no characters)
+export type ImageModel = "turbo" | "lightning" | "flux" | "zimage";
+export const SLOW_MODELS: ImageModel[] = ["flux", "zimage"];
 
 export interface JobSettings {
   width: number;

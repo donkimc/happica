@@ -1,4 +1,5 @@
-"""Text → image via the SDXL-Turbo ComfyUI workflow, or FLUX.1-schnell (`image_model: "flux"`).
+"""Text → image via the SDXL-Turbo ComfyUI workflow, SDXL-Lightning (`image_model: "lightning"`), FLUX.1-schnell
+(`"flux"`) or Z-Image Turbo (`"zimage"`, 6B, Q5 GGUF + Qwen3-4B Q6 GGUF text encoder, 8 steps).
 
 FLUX follows long descriptions far better (a character's colours, horns, outfit) and draws cleaner faces and eyes,
 at ~4–5 min per image (576×1024, ~60 s per step on the M2) instead of ~5 s. It runs as a Q5 GGUF (ComfyUI-GGUF custom nodes) so it fits in 16 GB, and
@@ -21,7 +22,14 @@ from config import OUTPUTS_DIR, WORKFLOWS_DIR
 
 WORKFLOW = json.loads((WORKFLOWS_DIR / "sdxl_turbo_t2i.json").read_text())
 FLUX_WORKFLOW = json.loads((WORKFLOWS_DIR / "flux_schnell_t2i.json").read_text())
-MODELS = ("turbo", "flux")
+ZIMAGE_WORKFLOW = json.loads((WORKFLOWS_DIR / "zimage_turbo_t2i.json").read_text())
+MODELS = ("turbo", "lightning", "flux", "zimage")
+# SDXL-Lightning (ByteDance, 4-step): the same SDXL graph as Turbo, so faces (PhotoMaker) and art characters
+# (IP-Adapter) still work. Distilled at 1024 px (Turbo at 512 px): in a 12-scene test at 576×1024 it drew cleaner
+# pictures with fewer stray extra figures at the same speed, but art characters stayed less on-model than with
+# Turbo. It wants plain euler on an sgm_uniform schedule.
+LIGHTNING = {"ckpt_name": "sdxl_lightning_4step.safetensors", "sampler": "euler", "scheduler": "sgm_uniform"}
+SDXL_MODELS = ("turbo", "lightning")
 IPADAPTER = json.loads((WORKFLOWS_DIR / "ipadapter_t2i.json").read_text())
 ART_WEIGHT = 0.7  # IP-Adapter strength: higher copies the reference pose too, lower drifts off-model
 ART_STEPS = 6  # like PhotoMaker, the extra conditioning needs a couple more turbo steps
@@ -56,15 +64,22 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
                     art: list[str | None] | None = None, art_refs: dict[str, list[str]] | None = None) -> dict:
     """One branch per prompt. Branches flagged in `with_face` are conditioned on the uploaded face with PhotoMaker
     (their prompt must contain the trigger word "img" after the class word, e.g. "a woman img")."""
-    if settings.get("image_model") == "flux":
+    model = settings.get("image_model", "turbo")
+    if model not in SDXL_MODELS:
         if face or any(art or []):
-            raise RuntimeError("FLUX can't use characters (PhotoMaker and IP-Adapter are SDXL-only); "
-                               "pick the Turbo picture model, or describe the character in the prompt instead")
-        return _flux_workflow(prompts, seeds, names, settings)
+            raise RuntimeError(f"{model} can't use characters (PhotoMaker and IP-Adapter are SDXL-only); "
+                               "pick Turbo or Lightning, or describe the character in the prompt instead")
+        return _flow_workflow(FLUX_WORKFLOW if model == "flux" else ZIMAGE_WORKFLOW, prompts, seeds, names, settings,
+                              steps=settings.get("image_steps", 4) if model == "flux" else 8)
     base = copy.deepcopy(WORKFLOW)
     base["negative"]["inputs"]["text"] = NEGATIVE
     base["latent"]["inputs"].update(width=settings["width"], height=settings["height"])
     base["sigmas"]["inputs"]["steps"] = settings.get("image_steps", 4)
+    if model == "lightning":
+        base["ckpt"]["inputs"]["ckpt_name"] = LIGHTNING["ckpt_name"]
+        base["sampler_select"]["inputs"]["sampler_name"] = LIGHTNING["sampler"]
+        base["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
+            "model": ["ckpt", 0], "scheduler": LIGHTNING["scheduler"], "steps": 4, "denoise": 1.0}}
     wf = {nid: node for nid, node in base.items() if nid not in PER_SCENE}
     with_face = with_face or [False] * len(prompts)
     if face and any(with_face):
@@ -102,9 +117,11 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
     return wf
 
 
-def _flux_workflow(prompts: list[str], seeds: list[int], names: list[str], settings: dict) -> dict:
-    """FLUX.1-schnell: the same shape as the Turbo batch (shared loaders and latent, one branch per scene)."""
-    base = copy.deepcopy(FLUX_WORKFLOW)
+def _flow_workflow(template: dict, prompts: list[str], seeds: list[int], names: list[str], settings: dict,
+                   steps: int) -> dict:
+    """FLUX.1-schnell or Z-Image Turbo: the same shape as the Turbo batch (shared loaders and latent, one branch
+    per scene). Both are distilled (cfg 1), so negative prompts do nothing."""
+    base = copy.deepcopy(template)
     base["latent"]["inputs"].update(width=settings["width"], height=settings["height"])
     wf = {nid: node for nid, node in base.items() if nid not in PER_SCENE}
     style = settings.get("style", "").strip()
@@ -115,7 +132,7 @@ def _flux_workflow(prompts: list[str], seeds: list[int], names: list[str], setti
                 if isinstance(value, list) and value[0] in PER_SCENE:
                     node["inputs"][key] = [f"{value[0]}_{i}", value[1]]
         branch[f"positive_{i}"]["inputs"]["text"] = f"{prompt}, {style}" if style else prompt
-        branch[f"sampler_{i}"]["inputs"].update(seed=seed, steps=settings.get("image_steps", 4))
+        branch[f"sampler_{i}"]["inputs"].update(seed=seed, steps=steps)
         branch[f"save_{i}"]["inputs"]["filename_prefix"] = f"happica/{name}"
         wf.update(branch)
     return wf

@@ -218,9 +218,8 @@ class JobRequest(BaseModel):
     voice: str = Field(default="af_heart", pattern=tts.VOICE_ID)
     subtitles: str = Field(default="burn", pattern="^(off|soft|burn)$")
     image_steps: int = Field(default=4, ge=1, le=8)
-    image_model: str = Field(default="turbo", pattern="^(turbo|flux)$",
-                             description="turbo = SDXL-Turbo (~5 s per picture); flux = FLUX.1-schnell (~4-5 min per picture at 576x1024, "
-                                         "follows descriptions closely, cleaner faces and eyes; no characters)")
+    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|flux|zimage)$",
+                             description="turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
     video_steps: int = Field(default=8, ge=4, le=30)
     ltx_steady: bool = Field(default=True, description="AI motion: steadier sampling (euler, light input compression); "
                                                        "faces and eyes wobble less")
@@ -471,9 +470,8 @@ class ImageRequest(BaseModel):
     count: int = Field(default=4, ge=1, le=4)
     character: str = ""  # a character id: their face via PhotoMaker
     image_steps: int = Field(default=4, ge=1, le=8)
-    image_model: str = Field(default="turbo", pattern="^(turbo|flux)$",
-                             description="turbo = SDXL-Turbo (~5 s per picture); flux = FLUX.1-schnell (~4-5 min per picture at 576x1024, "
-                                         "follows descriptions closely, cleaner faces and eyes; no characters)")
+    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|flux|zimage)$",
+                             description="turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
     seed: int | None = None
 
 
@@ -521,9 +519,9 @@ def _check_character(character_id: str) -> None:
 
 
 def _check_image_model(model: str, character_id: str = "", art: list[str] | None = None) -> None:
-    if model == "flux" and (character_id or art):
-        raise HTTPException(400, "Characters need the Turbo picture model (PhotoMaker and IP-Adapter are SDXL-only); "
-                                 "with FLUX, describe the character in the story's characters instead")
+    if model in ("flux", "zimage") and (character_id or art):
+        raise HTTPException(400, "Characters need the Turbo or Lightning picture model (PhotoMaker and IP-Adapter are "
+                                 "SDXL-only); with FLUX or Z-Image, describe the character in the story's characters instead")
 
 
 class VoiceRequest(BaseModel):

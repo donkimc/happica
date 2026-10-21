@@ -312,9 +312,8 @@ class StoryRequest(BaseModel):
     caption: str = Field(default="", max_length=2000, description="Text for caption.txt, between the title and hashtags")
     ltx_steady: bool = Field(default=True, description="AI motion: steadier sampling; faces and eyes wobble less")
     ltx_end_frame: bool = Field(default=True, description="AI motion: each clip ends on its clean picture")
-    image_model: str = Field(default="turbo", pattern="^(turbo|flux)$",
-                             description="turbo = SDXL-Turbo (fast); flux = FLUX.1-schnell (~4-5 min per picture at 576x1024, follows "
-                                         "character descriptions closely, cleaner eyes; can't be combined with art_characters)")
+    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|flux|zimage)$",
+                             description="turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
     seed: int | None = None
     webhook_url: str | None = WEBHOOK
 

@@ -278,12 +278,13 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
           Picture model
           <select
             value={settings.image_model ?? "turbo"}
-            disabled={!!settings.character || !!settings.art_characters?.length}
-            title={settings.character || settings.art_characters?.length ? "Characters need Turbo" : undefined}
+            title={settings.character || settings.art_characters?.length ? "Characters need Turbo or Lightning" : undefined}
             onChange={(e) => set({ image_model: e.target.value as ImageModel })}
           >
-            <option value="turbo">Turbo (fast)</option>
-            <option value="flux">FLUX (best detail, slow)</option>
+            <option value="turbo">Turbo (fast; best with characters)</option>
+            <option value="lightning">Lightning (fast, cleaner scenes)</option>
+            <option value="flux" disabled={!!settings.character || !!settings.art_characters?.length}>FLUX (detailed, ~5 min a picture)</option>
+            <option value="zimage" disabled={!!settings.character || !!settings.art_characters?.length}>Z-Image (best detail, ~4 min a picture)</option>
           </select>
         </label>
         <label>

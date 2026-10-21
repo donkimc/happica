@@ -66,6 +66,17 @@ curl -L -o models/text_encoders/clip_l.safetensors https://huggingface.co/comfya
 curl -L -o models/vae/flux_ae.safetensors https://huggingface.co/Comfy-Org/Lumina_Image_2.0_Repackaged/resolve/main/split_files/vae/ae.safetensors
 ```
 
+More picture models (optional), picked the same way:
+
+- `image_model: "zimage"` — **Z-Image Turbo** (6B, Apache 2.0) as a Q5 GGUF with a Qwen3-4B Q6 GGUF text encoder; reuses the FLUX VAE above (8.9 GB). The best at following picture-book descriptions in our tests (a character's horn, outfit and props; thatched roofs; tears of joy), ~4 min a picture — a little faster than FLUX and ~7 GB less memory. No characters (SDXL-only).
+- `image_model: "lightning"` — **SDXL-Lightning 4-step** (ByteDance, OpenRAIL++, 6.9 GB). Same speed and memory as Turbo, cleaner pictures with fewer stray extra figures, but cartoon (IP-Adapter) characters stay less on-model than with Turbo, so Turbo remains the default.
+
+```bash
+curl -L -o models/diffusion_models/z-image-turbo-Q5_K_M.gguf https://huggingface.co/unsloth/Z-Image-Turbo-GGUF/resolve/main/z-image-turbo-Q5_K_M.gguf
+curl -L -o models/text_encoders/Qwen3-4B-Q6_K.gguf https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q6_K.gguf
+curl -L -o models/checkpoints/sdxl_lightning_4step.safetensors https://huggingface.co/ByteDance/SDXL-Lightning/resolve/main/sdxl_lightning_4step.safetensors
+```
+
 Characters (PhotoMaker v1, 0.93 GB):
 
 ```bash
@@ -169,7 +180,9 @@ Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves th
 | Step | Time |
 |---|---|
 | Images (SDXL-Turbo, 768×512) | ~25 s to load the model once per job, then ~5 s per image |
-| Images (FLUX.1-schnell Q5, 576×1024) | ~40 s to load, then ~4–5 min per image (4 steps at ~60 s); 512×896 ≈ 3.5 min |
+| Images (FLUX.1-schnell Q5, 576×1024) | ~40 s to load, then ~4–5 min per image (4 steps at ~45–60 s); 6 scenes: 29.5 min, image ComfyUI peaks ~18 GB |
+| Images (Z-Image Turbo Q5, 576×1024) | ~4 min per image (8 steps at ~27 s); 6 scenes: 24.5 min, peak ~11 GB |
+| Images (SDXL-Lightning vs Turbo, 576×1024) | the same: 6 scenes ~110 s including the model load, peak ~10 GB |
 | Story → scenes (qwen2.5:3b) | ~15 s |
 | Narration (Kokoro) | ~5–10 s per scene |
 | Pan & zoom clip | < 1 s |

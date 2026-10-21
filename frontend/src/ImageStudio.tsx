@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cancelJob, createImages, deleteJob, Health, ImageModel, ImageSettings, isActive, Job, outputUrl, rerunJob } from "./api";
+import { cancelJob, createImages, deleteJob, Health, ImageModel, ImageSettings, isActive, SLOW_MODELS, Job, outputUrl, rerunJob } from "./api";
 
 export const IMAGE_DEFAULTS: ImageSettings = { prompt: "", style: "", width: 768, height: 512, count: 4 };
 
@@ -31,7 +31,7 @@ export default function ImageStudio({ characters, jobs, health, upsert, remove, 
   const set = (patch: Partial<ImageSettings>) => setSettings((s) => ({ ...s, ...patch }));
   const offline = health !== null && health.comfyui !== "ok";
   const big = settings.width * settings.height > 600_000;
-  const flux = settings.image_model === "flux" && !settings.character;
+  const flux = SLOW_MODELS.includes(settings.image_model ?? "turbo") && !settings.character;
 
   return (
     <>
@@ -87,12 +87,13 @@ export default function ImageStudio({ characters, jobs, health, upsert, remove, 
             Picture model
             <select
               value={settings.image_model ?? "turbo"}
-              disabled={!!settings.character}
-              title={settings.character ? "Characters need Turbo" : undefined}
+              title={settings.character ? "Characters need Turbo or Lightning" : undefined}
               onChange={(e) => set({ image_model: e.target.value as ImageModel })}
             >
-              <option value="turbo">Turbo (fast)</option>
-              <option value="flux">FLUX (best detail, slow)</option>
+              <option value="turbo">Turbo (fast; best with characters)</option>
+              <option value="lightning">Lightning (fast, cleaner scenes)</option>
+              <option value="flux" disabled={!!settings.character}>FLUX (detailed, ~5 min a picture)</option>
+              <option value="zimage" disabled={!!settings.character}>Z-Image (best detail, ~4 min a picture)</option>
             </select>
           </label>
           <label>
