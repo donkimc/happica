@@ -143,6 +143,9 @@ class ScriptScene(BaseModel):
     sfx: list[SfxCue] = Field(default_factory=list, max_length=4, description="Sound effects in this scene")
     motion_mode: str | None = Field(default=None, pattern="^(kenburns|ltx|none)$",
                                     description="Overrides the job's motion for this scene; none = a still picture")
+    lyric_lines: int | None = Field(default=None, ge=0, le=40,
+                                    description="Sung story: how many lyric lines this scene shows (in order); when every "
+                                                "scene sets it, scenes change exactly where their lines start")
 
 
 class CaptionStyle(BaseModel):
@@ -166,6 +169,8 @@ class SongSpec(BaseModel):
     language: str = Field(default="ko", pattern="^[a-z]{2,3}$")
     duration: float = Field(default=60, ge=10, le=240)
     seed: int | None = None
+    takes: int = Field(default=2, ge=1, le=3, description="Songs with lyrics: make this many takes and keep the one whose "
+                                                          "words Whisper hears most clearly (each extra take ~2 min)")
 
 
 class SongBlock(BaseModel):
@@ -198,7 +203,7 @@ class JobRequest(BaseModel):
     caption_style: CaptionStyle | None = Field(default=None, description="How burned-in subtitles look")
     output_height: int | None = Field(default=None, ge=256, le=2160,
                                       description="Final video height, e.g. 1920: 576×1024 is exported as 1080×1920")
-    upscale: str = Field(default="fast", pattern="^(fast|ai)$",
+    upscale: str = Field(default="fast", pattern="^(fast|ai|anime)$",
                          description="How the final video is enlarged to output_height: fast (lanczos, seconds) or ai "
                                      "(Real-ESRGAN, ~1 s per frame); captions are drawn at the final size either way")
     song_track: str = ""  # musicvideo: a Music library take's .flac under outputs/
@@ -217,6 +222,10 @@ class JobRequest(BaseModel):
                              description="turbo = SDXL-Turbo (~5 s per picture); flux = FLUX.1-schnell (~4-5 min per picture at 576x1024, "
                                          "follows descriptions closely, cleaner faces and eyes; no characters)")
     video_steps: int = Field(default=8, ge=4, le=30)
+    ltx_steady: bool = Field(default=True, description="AI motion: steadier sampling (euler, light input compression); "
+                                                       "faces and eyes wobble less")
+    ltx_end_frame: bool = Field(default=True, description="AI motion: pin each clip's last frame to its picture, so the "
+                                                          "motion returns to the clean drawing instead of drifting")
     seed: int | None = None
     music: str = Field(default="off", pattern="^(off|auto|library)$")
     music_track: str = ""  # a library take's .flac path under outputs/, when music == "library"

@@ -98,7 +98,8 @@ def align(lines: list[dict], words: list[dict], song_seconds: float) -> list[dic
         hits = [matched[k] for k in range(len(ref)) if owner[k] == li and matched[k] is not None]
         size = sum(1 for o in owner if o == li) or 1
         sure = len(hits) / size >= 0.4
-        timed.append({**line, "start": times[hits[0]][0] if sure else None, "end": times[hits[-1]][1] if sure else None})
+        timed.append({**line, "start": times[hits[0]][0] if sure else None, "end": times[hits[-1]][1] if sure else None,
+                      "heard": round(len(hits) / size, 2)})
 
     # Lines Whisper missed: share the gap between the nearest timed neighbours by length
     k = 0
@@ -125,7 +126,7 @@ def align(lines: list[dict], words: list[dict], song_seconds: float) -> list[dic
 
 async def timing(song: Path, lyrics: str, language: str) -> list[dict]:
     """Per-line timing of a song's lyrics (cached by the lyrics' hash next to the song)."""
-    key = hashlib.sha1(f"{language}\n{lyrics}".encode()).hexdigest()[:12]
+    key = hashlib.sha1(f"v2\n{language}\n{lyrics}".encode()).hexdigest()[:12]  # v2: lines carry "heard"
     cache = song.with_name(f"{song.stem}_lyrics.json")
     if cache.is_file() and (data := json.loads(cache.read_text())).get("key") == key:
         return data["lines"]
@@ -158,6 +159,11 @@ def _save_to_music_job(song: Path, timed: list[dict]) -> None:
         if t.get("flac") == rel:
             t["lyrics_timing"] = timed
     store.update(job["id"], result=result)
+
+
+def clarity(timed: list[dict]) -> float:
+    """How much of the lyrics Whisper heard (0–1, by letters): a take with mumbled or wrong words scores low."""
+    return round(sum(t.get("heard", 0) for t in timed) / len(timed), 3) if timed else 0.0
 
 
 def chorus(timed: list[dict]) -> tuple[float, float] | None:

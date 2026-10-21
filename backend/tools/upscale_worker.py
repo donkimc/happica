@@ -79,7 +79,8 @@ def video(model, args, half: bool) -> None:
             batch.append(np.frombuffer(buf, np.uint8).reshape(h, w, 3))
         if not batch:
             break
-        writer.stdin.write(upscale(model, np.stack(batch), half, 0).tobytes())
+        # Tiled like images: one MPS convolution over a whole large frame returns garbage (striped noise)
+        writer.stdin.write(upscale(model, np.stack(batch), half, args.tile).tobytes())
         done += len(batch)
         print(f"PROGRESS {done} {total}", flush=True)
     writer.stdin.close()

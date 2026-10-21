@@ -167,7 +167,8 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
         result["durations"] = [round((song_seconds + (n - 1) * fade) / n, 3)] * n
     placement = (result.get("song") or {}).get("placement")
     if placement == "sung_story":
-        result["durations"] = song.sung_durations(result["song"], len(shots), fade)
+        counts = [s.get("lyric_lines") for s in settings.get("script") or []]
+        result["durations"] = song.sung_durations(result["song"], len(shots), fade, counts)
         result["song"]["lyric_cues"] = song.full_song_cues(result["song"])
     elif placement == "intro_outro":
         layout = song.intro_outro(result["song"], [bool(x) for x in speech], result["durations"], fade, LEAD,
@@ -417,9 +418,10 @@ async def _picture(job_dir: Path, settings: dict, clips: list[Path], durations: 
     joined = await assemble.concat(clips, durations, job_dir / "video_joined.mp4", fade)
     if size == (settings["width"], settings["height"]):
         joined.replace(out)
-    elif method == "ai":
+    elif method in ("ai", "anime"):
         report("upscaling (AI)", 0.0)
-        await upscale._ai(joined, out, *size, True, lambda p: report("upscaling (AI)", p), lambda: False)
+        await upscale._ai(joined, out, *size, True, lambda p: report("upscaling (AI)", p), lambda: False,
+                          anime=method == "anime")
         joined.unlink()
     else:
         await ffmpeg.run("-i", str(joined), "-vf", f"scale={size[0]}:{size[1]}:flags=lanczos", *ffmpeg.ENCODE, str(out))

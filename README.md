@@ -89,6 +89,7 @@ Upscaling (API only) uses two Real-ESRGAN models — 64 MB for pictures, 5 MB fo
 ```bash
 curl -L -o models/upscale_models/RealESRGAN_x4plus.pth https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
 curl -L -o models/upscale_models/realesr-general-x4v3.pth https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-general-x4v3.pth
+curl -L -o models/upscale_models/realesr-animevideov3.pth https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-animevideov3.pth
 ```
 
 Cartoon characters from reference art (IP-Adapter Plus for SDXL + its CLIP-ViT-H image encoder, 3.4 GB; `scripts/setup.sh` installs the `ComfyUI_IPAdapter_plus` nodes):
@@ -173,6 +174,7 @@ Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves th
 | Narration (Kokoro) | ~5–10 s per scene |
 | Pan & zoom clip | < 1 s |
 | AI motion clip (LTX-Video, 3 s at 768×512) | ~6.5 min |
+| AI motion, story 9:16 (LTX at 576×1024, ~5–8 s per scene, steady + pinned end frame) | ~20–26 min per scene |
 | Song, 2 takes (ACE-Step 1.5) | ~2 min for 30 s, ~3 min for 1 min |
 | Sound effect, 2 takes (Stable Audio 3 small SFX) | ~5 s for 10 s, ~15 s for 45 s (+~8 s with AI detail) |
 | Scene sound effects (all of a video's cues in one run) | 9 cues in ~22 s; cached, so re-mixing is free |
@@ -225,6 +227,17 @@ Typical jobs: a 4-scene narrated story with pan & zoom takes about 1.5–2 minut
 3. ✅ M3 — Simple mode: describe a song; qwen2.5:7b drafts title, tags, lyrics (sized to the length) and BPM/key/language for review, or creates directly
 4. ✅ M4 — Background music in videos: Off / Auto (LLM picks a style from the story, ACE-Step scores the exact length) / From library; looped or trimmed, faded, sidechain-ducked under narration, level control; Change music re-mixes a finished video
 5. M5 — Polish: guide, presets with music
+
+## Quality notes (cartoon stories)
+
+- **AI motion** runs steady by default (`ltx_steady`: euler sampler, light input compression) and pins each clip's last
+  frame to its picture (`ltx_end_frame`, LTXVAddGuide), so motion returns to the clean drawing. In A/B tests this kept
+  two characters on-model where the old settings zoomed in, warped eyes and bled one character's colour onto the
+  other's hands. Write motion as gentle character actions (blink, smile, sway); no camera directions, no dancing.
+- **Upscaling** `anime` (Real-ESRGAN animevideov3) gives the crispest outlines and eyes for cartoons; video frames
+  are upscaled in tiles (a whole frame in one MPS convolution came out as striped noise).
+- **Songs** with lyrics make 2 takes (`takes`) and keep the one whose words Whisper hears best; sung-story scenes can
+  give `lyric_lines` so pictures change right before their own lines. Finished videos are normalised to -14 LUFS.
 
 ## Sound effects
 

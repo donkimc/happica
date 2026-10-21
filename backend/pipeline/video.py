@@ -28,10 +28,15 @@ MOVES = [
 ]
 
 LTX_WORKFLOW = json.loads((WORKFLOWS_DIR / "ltxv_i2v.json").read_text())
-LTX_NEGATIVE = "worst quality, inconsistent motion, blurry, jittery, distorted, static, watermark"
-
+LTX_NEGATIVE = ("worst quality, inconsistent motion, blurry, jittery, distorted, deformed face, extra limbs, "
+                "deformed hands, color bleeding, morphing, flicker, static, watermark")
+LTX_MOTION_HINT = "smooth gentle animation, stable faces, consistent cartoon style"
 
 LTX_MAX_SECONDS = 8  # longer LTX clips get slow and drift; anything beyond holds the last frame
+# Steadier LTX (default): plain euler instead of euler_ancestral (no fresh noise each step, so faces and eyes
+# wobble less), lighter input compression (keeps the clean picture's outlines), and the clip's last frame pinned
+# to the start picture (LTXVAddGuide) so the motion returns to the clean drawing instead of drifting off-model.
+LTX_STEADY = {"sampler": "euler", "img_compression": 20}
 
 
 async def animate(comfy: ComfyClient, image: Path, prompt: str, settings: dict, out_path: Path, index: int,
@@ -71,6 +76,20 @@ async def ken_burns(image: Path, settings: dict, out_path: Path, index: int, sec
     return out_path
 
 
+def _pin_last_frame(wf: dict) -> None:
+    """Condition the last frame on the start picture too, then crop the guide latents off before decoding."""
+    wf["guide"] = {"class_type": "LTXVAddGuide", "inputs": {
+        "positive": ["i2v", 0], "negative": ["i2v", 1], "vae": ["ckpt", 2], "latent": ["i2v", 2],
+        "image": ["preprocess", 0], "frame_idx": -1, "strength": 1.0}}
+    wf["conditioning"]["inputs"].update(positive=["guide", 0], negative=["guide", 1])
+    for node in ("model_sampling", "sigmas"):
+        wf[node]["inputs"]["latent"] = ["guide", 2]
+    wf["sampler"]["inputs"]["latent_image"] = ["guide", 2]
+    wf["crop_guides"] = {"class_type": "LTXVCropGuides", "inputs": {
+        "positive": ["conditioning", 0], "negative": ["conditioning", 1], "latent": ["sampler", 0]}}
+    wf["decode"]["inputs"]["samples"] = ["crop_guides", 2]
+
+
 async def ltx(comfy: ComfyClient, image: Path, prompt: str, settings: dict, out_path: Path,
               seconds: float, seed: int, on_progress: Callable[[float], None]) -> Path:
     w, h = settings["width"], settings["height"]
@@ -81,11 +100,16 @@ async def ltx(comfy: ComfyClient, image: Path, prompt: str, settings: dict, out_
     wf = copy.deepcopy(LTX_WORKFLOW)
     wf["load_image"]["inputs"]["image"] = await comfy.upload_image(image, f"{out_path.parent.parent.name}_{image.name}")
     style = settings.get("style", "").strip()
-    wf["positive"]["inputs"]["text"] = f"{prompt}, natural subtle motion, {style}" if style else f"{prompt}, natural subtle motion"
+    wf["positive"]["inputs"]["text"] = f"{prompt}, {LTX_MOTION_HINT}" + (f", {style}" if style else "")
     wf["negative"]["inputs"]["text"] = LTX_NEGATIVE
     wf["i2v"]["inputs"].update(width=w, height=h, length=frames)
     wf["sigmas"]["inputs"]["steps"] = settings.get("video_steps", 8)
     wf["sampler"]["inputs"]["noise_seed"] = seed
+    if settings.get("ltx_steady", True):
+        wf["sampler_select"]["inputs"]["sampler_name"] = LTX_STEADY["sampler"]
+        wf["preprocess"]["inputs"]["img_compression"] = LTX_STEADY["img_compression"]
+    if settings.get("ltx_end_frame", True):
+        _pin_last_frame(wf)
     wf["save"]["inputs"]["filename_prefix"] = f"happica/{out_path.parent.parent.name}_{out_path.stem}"
 
     outputs = await comfy.run(wf, lambda value, total, _node: on_progress(value / total))

@@ -19,6 +19,7 @@ WORKER = Path(__file__).resolve().parent.parent / "tools" / "upscale_worker.py"
 MODELS = ROOT_DIR / "models" / "upscale_models"
 IMAGE_MODEL = MODELS / "RealESRGAN_x4plus.pth"  # best detail for pictures
 VIDEO_MODEL = MODELS / "realesr-general-x4v3.pth"  # ~4x faster, steady from frame to frame
+ANIME_MODEL = MODELS / "realesr-animevideov3.pth"  # cartoons: crisp outlines and eyes, no halos (images and video)
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 MAX_SIDE = 3840
 
@@ -81,7 +82,7 @@ async def run(job: dict, job_dir: Path, report, sources: list[Path], is_cancelle
             else:
                 await ffmpeg.run("-i", str(src), "-vf", vf, str(out))
         else:
-            await _ai(src, out, w, h, is_video, step, is_cancelled)
+            await _ai(src, out, w, h, is_video, step, is_cancelled, anime=method == "anime")
         sizes.append([w, h])
         if is_video:
             video = rel(out)
@@ -95,9 +96,9 @@ async def run(job: dict, job_dir: Path, report, sources: list[Path], is_cancelle
     return result
 
 
-async def _ai(src: Path, out: Path, w: int, h: int, is_video: bool, step, is_cancelled) -> None:
+async def _ai(src: Path, out: Path, w: int, h: int, is_video: bool, step, is_cancelled, anime: bool = False) -> None:
     proc = await asyncio.create_subprocess_exec(
-        str(PYTHON), str(WORKER), "--model", str(VIDEO_MODEL if is_video else IMAGE_MODEL), "--input", str(src),
+        str(PYTHON), str(WORKER), "--model", str(ANIME_MODEL if anime else VIDEO_MODEL if is_video else IMAGE_MODEL), "--input", str(src),
         "--output", str(out), "--width", str(w), "--height", str(h), "--kind", "video" if is_video else "image",
         "--batch", "1", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         env={**os.environ, "PYTORCH_ENABLE_MPS_FALLBACK": "1"})

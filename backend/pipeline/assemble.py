@@ -157,4 +157,29 @@ async def finalize(video: Path, out: Path, total: float, narration: Path | None 
     if graph:
         args += ["-filter_complex", ";".join(graph)]
     await ffmpeg.run(*args, *maps, *codec, "-t", f"{total:.3f}", str(out))
+    if audio_out:
+        await normalize_loudness(out)
     return out
+
+
+LOUDNESS = "I=-14:TP=-1.5:LRA=11"  # TikTok / YouTube / Reels level; the mix above peaks well under it otherwise
+
+
+async def normalize_loudness(video: Path) -> None:
+    """Two-pass loudnorm of the finished video's sound (measure, then a linear gain), in place; the picture and
+    subtitle tracks are copied untouched. One pass would compress dynamically and pump under the narration."""
+    import asyncio
+    import json
+
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg", "-hide_banner", "-i", str(video), "-af", f"loudnorm={LOUDNESS}:print_format=json", "-f", "null", "-",
+        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+    _, err = await proc.communicate()
+    text = err.decode()
+    m = json.loads(text[text.rindex("{"):text.rindex("}") + 1])
+    measured = (f":measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}"
+                f":measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true")
+    tmp = video.with_name(f"{video.stem}.loud{video.suffix}")
+    await ffmpeg.run("-i", str(video), "-map", "0", "-c", "copy", "-af", f"loudnorm={LOUDNESS}{measured}",
+                     "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", str(tmp))
+    tmp.replace(video)

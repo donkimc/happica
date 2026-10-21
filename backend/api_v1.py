@@ -217,8 +217,8 @@ class UpscaleRequest(BaseModel):
     target_height: int | None = Field(default=None, ge=256, le=2160,
                                       description="e.g. 1080, 1440 or 2160; the short side for portrait clips")
     scale: float | None = Field(default=None, ge=1.5, le=4, description="Or a factor (default 2); the long side stops at 3840")
-    method: str = Field(default="ai", pattern="^(ai|fast)$",
-                        description="ai = Real-ESRGAN, redraws detail (slow for video: ~0.8 s/frame); fast = plain resize")
+    method: str = Field(default="ai", pattern="^(ai|anime|fast)$",
+                        description="ai = Real-ESRGAN, redraws detail (slow for video: ~0.8 s/frame); anime = Real-ESRGAN for cartoons; fast = plain resize")
     webhook_url: str | None = WEBHOOK
 
 
@@ -272,6 +272,7 @@ class StoryScene(BaseModel):
     sfx: str | list[main.SfxCue] = Field(default_factory=list, description="A sound description, or a list of cues")
     motion: str = Field(default="", max_length=300, description="What moves (AI motion)")
     motion_mode: str | None = Field(default=None, pattern="^(kenburns|ltx|none)$")
+    lyric_lines: int | None = Field(default=None, ge=0, le=40, description="Sung story: lyric lines this scene shows")
 
 
 class StorySong(main.SongSpec):
@@ -300,7 +301,8 @@ class StoryRequest(BaseModel):
     width: int = Field(default=576, ge=256, le=1024, multiple_of=64)
     height: int = Field(default=1024, ge=256, le=1024, multiple_of=64)
     output_height: int | None = Field(default=1920, ge=256, le=2160)
-    upscale: str = Field(default="fast", pattern="^(fast|ai)$")
+    upscale: str = Field(default="fast", pattern="^(fast|ai|anime)$",
+                         description="fast = resize; ai = Real-ESRGAN general; anime = Real-ESRGAN for cartoons (best for this art)")
     clip_seconds: float = Field(default=3, ge=1, le=10)
     fade: float = Field(default=0.5, ge=0, le=2)
     music_volume: float = Field(default=0.35, ge=0, le=1, description="The song's instrumental / bed under the narration")
@@ -308,6 +310,8 @@ class StoryRequest(BaseModel):
     caption_style: main.CaptionStyle | None = None
     hashtags: list[str] = Field(default_factory=list, max_length=30)
     caption: str = Field(default="", max_length=2000, description="Text for caption.txt, between the title and hashtags")
+    ltx_steady: bool = Field(default=True, description="AI motion: steadier sampling; faces and eyes wobble less")
+    ltx_end_frame: bool = Field(default=True, description="AI motion: each clip ends on its clean picture")
     image_model: str = Field(default="turbo", pattern="^(turbo|flux)$",
                              description="turbo = SDXL-Turbo (fast); flux = FLUX.1-schnell (~4-5 min per picture at 576x1024, follows "
                                          "character descriptions closely, cleaner eyes; can't be combined with art_characters)")
@@ -318,6 +322,7 @@ class StoryRequest(BaseModel):
 def _story_settings(story: StoryRequest, song_track: str = "") -> main.JobRequest:
     """A story file → a script-mode video job."""
     script = [main.ScriptScene(image_prompt=sc.image, narration=sc.narration, motion=sc.motion, motion_mode=sc.motion_mode,
+                               lyric_lines=sc.lyric_lines,
                                sfx=[main.SfxCue(prompt=sc.sfx)] if isinstance(sc.sfx, str) and len(sc.sfx.strip()) >= 2
                                else [] if isinstance(sc.sfx, str) else sc.sfx)
               for sc in story.scenes]
@@ -336,7 +341,7 @@ def _story_settings(story: StoryRequest, song_track: str = "") -> main.JobReques
         narrate=any(sc.narration.strip() for sc in story.scenes), subtitles=story.subtitles, width=story.width,
         height=story.height, output_height=story.output_height, upscale=story.upscale, clip_seconds=story.clip_seconds,
         fade=story.fade, music_volume=story.music_volume, caption_style=story.caption_style, seed=story.seed, song=song,
-        image_model=story.image_model)
+        image_model=story.image_model, ltx_steady=story.ltx_steady, ltx_end_frame=story.ltx_end_frame)
     return req
 
 

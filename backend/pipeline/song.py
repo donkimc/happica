@@ -27,6 +27,7 @@ async def prepare(job: dict, job_dir: Path, report, music_comfy: ComfyClient) ->
     from jobs import JobStore
 
     block = job["settings"]["song"]
+    takes = None
     if block.get("track"):
         track = block["track"]
         music_job = JobStore().get(track.split("/")[0])
@@ -40,15 +41,24 @@ async def prepare(job: dict, job_dir: Path, report, music_comfy: ComfyClient) ->
         if seed is None:
             seed = random.randrange(2**31)
         settings = {**spec, "instrumental": not lyrics.strip()}
-        tracks = await music.generate(music_comfy, settings, job_dir / "song", f"{job_dir.name}_song", [seed],
-                                      lambda stage, p: report(f"song: {stage}", p))
+        n = spec.get("takes", 2) if lyrics.strip() else 1
+        tracks = await music.generate(music_comfy, settings, job_dir / "song", f"{job_dir.name}_song",
+                                      [seed + k for k in range(n)], lambda stage, p: report(f"song: {stage}", p))
         track = tracks[0]["flac"]
+        if n > 1:  # keep the take whose sung words come through clearest
+            report("song: choosing the clearest take", 0.0)
+            scores = [lyrics_align.clarity(await lyrics_align.timing(OUTPUTS_DIR / t["flac"], lyrics, language))
+                      for t in tracks]
+            track = tracks[scores.index(max(scores))]["flac"]
+            takes = [{"track": t["flac"], "clarity": s} for t, s in zip(tracks, scores)]
     path = OUTPUTS_DIR / track
     if not path.is_file():
         raise RuntimeError(f"The song {track} doesn't exist (did its music job fail?)")
     info = {"placement": block.get("placement", "bed"), "track": track, "mp3": track.removesuffix(".flac") + ".mp3",
             "title": title, "language": language, "volume": block.get("volume", 0.5),
             "lyrics_subtitles": block.get("lyrics_subtitles", True), "duration": round(sf.info(path).duration, 2)}
+    if takes:
+        info["takes"] = takes  # every take and its clarity, for the job page
     if info["placement"] == "intro_outro":
         report("song: separating the instrumental", 0.0)
         _, instrumental = await stems.separate(path)
@@ -59,11 +69,18 @@ async def prepare(job: dict, job_dir: Path, report, music_comfy: ComfyClient) ->
     return info
 
 
-def sung_durations(song: dict, n: int, fade: float) -> list[float]:
-    """Scene lengths for a sung story: scene k starts when its first lyric line starts; the last runs to the end."""
+def sung_durations(song: dict, n: int, fade: float, counts: list[int | None] | None = None) -> list[float]:
+    """Scene lengths for a sung story: scene k starts when its first lyric line starts; the last runs to the end.
+    `counts` (lyric lines per scene, from the script) puts each cut exactly where the scene's own lines begin;
+    otherwise the lines are shared out evenly."""
     lines, total = song.get("timing") or [], song["duration"]
     m = len(lines)
-    if m >= n:
+    if counts and len(counts) == n and all(c is not None for c in counts) and sum(counts) == m and m:
+        first, bounds = 0, []
+        for c in counts:
+            bounds.append(0.0 if not bounds else max(0.0, lines[min(first, m - 1)]["start"] - 0.3))  # picture just before the singing
+            first += c
+    elif m >= n:
         bounds = [0.0] + [lines[round(k * m / n)]["start"] for k in range(1, n)]
     else:
         bounds = [total * k / n for k in range(n)]
