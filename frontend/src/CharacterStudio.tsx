@@ -266,7 +266,9 @@ function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; change
                 act(async () => {
                   const prompt = change.toLowerCase().includes(s.name.toLowerCase()) ? change : `${s.name} ${change}`;
                   const style = s.kind === "art" ? s.style || ART_STYLE : "photorealistic, 35mm photo";
-                  upsert(await createImages({ ...IMAGE_DEFAULTS, prompt, width: 512, height: 512, count: 2, style, character: job.id }));
+                  // real faces at 768 px: at 512 the eyes are tiny and often come out mismatched
+                  const size = s.kind === "art" ? 512 : 768;
+                  upsert(await createImages({ ...IMAGE_DEFAULTS, prompt, width: size, height: size, count: 2, style, character: job.id }));
                   setChange("");
                 })
               }
