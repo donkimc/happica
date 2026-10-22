@@ -39,6 +39,9 @@ PER_SCENE = ("positive", "sampler", "decode", "save")  # duplicated per scene; t
 
 
 CHARACTER_STEPS = 6  # PhotoMaker needs a couple more turbo steps to settle the face
+# The first 40% of sampling follows only the prompt (composition, era, clothes, setting); the face comes after.
+# Applied from the start, PhotoMaker copies the photo's background and outfit too and ignores "1920s portrait".
+FACE_START = 0.4
 
 
 def _art_nodes(wf: dict, key: str, refs: list[str], weight: float) -> None:
@@ -63,7 +66,7 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
                     face: str | None = None, with_face: list[bool] | None = None,
                     art: list[str | None] | None = None, art_refs: dict[str, list[str]] | None = None) -> dict:
     """One branch per prompt. Branches flagged in `with_face` are conditioned on the uploaded face with PhotoMaker
-    (their prompt must contain the trigger word "img" after the class word, e.g. "a woman img")."""
+    (build their prompts with character.prompt_for(): it adds the "photomaker" trigger word ComfyUI needs)."""
     model = settings.get("image_model", "turbo")
     if model not in SDXL_MODELS:
         if face or any(art or []):
@@ -104,8 +107,17 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
                     node["inputs"][key] = [f"{value[0]}_{i}", value[1]]
         text = f"{prompt}, {style}" if style else prompt
         if face and with_face[i]:
-            branch[f"positive_{i}"] = {"class_type": "PhotoMakerEncode", "inputs": {
+            start = float(settings.get("face_start", FACE_START))
+            wf[f"face_cond_{i}"] = {"class_type": "PhotoMakerEncode", "inputs": {
                 "photomaker": ["photomaker", 0], "image": ["face", 0], "clip": ["ckpt", 1], "text": text}}
+            wf[f"plain_cond_{i}"] = {"class_type": "CLIPTextEncode", "inputs": {
+                "clip": ["ckpt", 1], "text": text.replace(" photomaker ", " ", 1)}}
+            wf[f"plain_range_{i}"] = {"class_type": "ConditioningSetTimestepRange", "inputs": {
+                "conditioning": [f"plain_cond_{i}", 0], "start": 0.0, "end": start}}
+            wf[f"face_range_{i}"] = {"class_type": "ConditioningSetTimestepRange", "inputs": {
+                "conditioning": [f"face_cond_{i}", 0], "start": start, "end": 1.0}}
+            branch[f"positive_{i}"] = {"class_type": "ConditioningCombine", "inputs": {
+                "conditioning_1": [f"plain_range_{i}", 0], "conditioning_2": [f"face_range_{i}", 0]}}
             branch[f"sampler_{i}"]["inputs"]["sigmas"] = ["sigmas_face", 0]
         else:
             branch[f"positive_{i}"]["inputs"]["text"] = text

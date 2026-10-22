@@ -32,15 +32,18 @@ def load(character_id: str) -> dict | None:
 
 
 def prompt_for(prompt: str, ch: dict) -> str:
-    """Rewrite a prompt so PhotoMaker can place the character: the name becomes "<kind> img" (its trigger word)
-    and the look is added."""
-    who = f"{ch.get('kind', 'person')} img"
+    """Rewrite a prompt so PhotoMaker can place the character: it starts with "<kind> photomaker", the name becomes
+    "the <kind>", and the look is added.
+
+    ComfyUI's PhotoMakerEncode only applies the face when the prompt has the word "photomaker" on its own
+    (space-separated — "photomaker," doesn't count) right after the class word; without it the photo is silently
+    ignored and the face comes from the text alone. It finds the class word by counting words but replaces a
+    token, so any multi-token word before it ("close-up") would put the face on the wrong token — hence the
+    trigger always comes first, after the one-token class word."""
+    kind = ch.get("kind", "person")
     name = (ch.get("name") or "").strip()
-    if name and re.search(rf"\b{re.escape(name)}\b", prompt, re.I):
-        text = re.sub(rf"\b{re.escape(name)}\b", who, prompt, count=1, flags=re.I)
-    else:
-        text = f"{who}, {prompt}"
-    return f"{text}, {ch.get('look', '')}".strip(", ")
+    text = re.sub(rf"\b{re.escape(name)}\b", f"the {kind}", prompt, flags=re.I) if name else prompt
+    return f"{kind} photomaker {text}, {ch.get('look', '')}".strip(", ")
 
 
 def mentions(prompt: str, ch: dict) -> bool:
@@ -74,7 +77,7 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
                                    on_progress=lambda p: report("drawing the character sheet", p),
                                    art=[{"id": job["id"], **ch}] * len(prompts))
         return {"images": [str(p.relative_to(OUTPUTS_DIR)) for p in paths], "seed": seed}
-    who = f"a {ch.get('kind', 'person')} img"
+    who = f"a {ch.get('kind', 'person')} photomaker "  # the space keeps "photomaker" a word of its own
     prompts = [p.format(who=who, look=ch.get("look", "")) for p in SHEET]
     seed = random.randrange(2**32)
     paths = [job_dir / f"sheet_{i + 1}.png" for i in range(len(prompts))]
