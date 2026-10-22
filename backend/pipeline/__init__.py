@@ -275,8 +275,10 @@ async def change_scene_sfx(job: dict, job_dir: Path, report, music_comfy: ComfyC
 
 
 async def regenerate_scene(job: dict, job_dir: Path, report, comfy: ComfyClient,
-                           index: int, prompt: str | None = None) -> dict:
+                           index: int, prompt: str | None = None, motion: str | None = None,
+                           keep_image: bool = False) -> dict:
     """Redo one scene's image (new seed, optionally a new prompt), then its clip and the final video.
+    `motion` replaces the scene's motion text; `keep_image` keeps the picture and only animates it again.
 
     The narration and the scene's length stay the same.
     """
@@ -285,10 +287,17 @@ async def regenerate_scene(job: dict, job_dir: Path, report, comfy: ComfyClient,
     if prompt:
         prompts[index] = prompt
     seeds = list(result.get("seeds") or [None] * len(prompts))
-    seeds[index] = random.randrange(2**32)
-    result.update(scenes=prompts, seeds=seeds)
+    clip_seed = random.randrange(2**32)
+    if not keep_image:
+        seeds[index] = clip_seed
+    motions = list(result.get("motion") or [""] * len(prompts))
+    if motion:
+        motions[index] = motion
+    result.update(scenes=prompts, seeds=seeds, motion=motions)
 
     p = _paths(job_dir, index)
+    if keep_image and p["image"].is_file():
+        return await _reanimate(job_dir, settings, result, report, comfy, index, prompts, clip_seed)
     ch = character.load(settings.get("character", ""))
     face = bool(ch) and (result.get("with_face") or [True] * len(prompts))[index]
     art_chars = [a for a in (character.load(i) for i in settings.get("art_characters") or []) if a]
@@ -300,17 +309,25 @@ async def regenerate_scene(job: dict, job_dir: Path, report, comfy: ComfyClient,
 
     # Only rebuild video if this job made one (an "images only" job or one that failed before video stays as is)
     if result.get("video"):
-        mode = (result.get("motion_modes") or script.modes(settings, len(prompts)))[index]
-        if mode == "ltx":
-            await comfy.free()
-        motion = (result.get("motion") or [""] * len(prompts))[index]
-        durations = result.get("durations") or [settings.get("clip_seconds", 3)] * len(prompts)
-        await video.animate(comfy, p["image"], _video_prompt({"prompt": prompts[index], "motion": motion}),
-                            {**settings, "motion": mode},
-                            p["clip"], index, seconds=durations[index], seed=seeds[index],
-                            on_progress=lambda prog: report(f"scene {index + 1} clip", prog))
-        report("assemble", 0.0)
-        result.update(await _assemble(job_dir, settings, result, report))
+        return await _reanimate(job_dir, settings, result, report, comfy, index, prompts, seeds[index])
+    return result
+
+
+async def _reanimate(job_dir: Path, settings: dict, result: dict, report, comfy: ComfyClient, index: int,
+                     prompts: list[str], seed: int) -> dict:
+    """Make one scene's clip again from its picture, then re-assemble the final video."""
+    p = _paths(job_dir, index)
+    mode = (result.get("motion_modes") or script.modes(settings, len(prompts)))[index]
+    if mode == "ltx":
+        await comfy.free()
+    motion = (result.get("motion") or [""] * len(prompts))[index]
+    durations = result.get("durations") or [settings.get("clip_seconds", 3)] * len(prompts)
+    await video.animate(comfy, p["image"], _video_prompt({"prompt": prompts[index], "motion": motion}),
+                        {**settings, "motion": mode},
+                        p["clip"], index, seconds=durations[index], seed=seed,
+                        on_progress=lambda prog: report(f"scene {index + 1} clip", prog))
+    report("assemble", 0.0)
+    result.update(await _assemble(job_dir, settings, result, report))
     return result
 
 

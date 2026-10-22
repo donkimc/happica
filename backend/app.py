@@ -589,7 +589,10 @@ async def rerun_job(job_id: str, req: RerunRequest = RerunRequest()):
 
 
 class RegenerateRequest(BaseModel):
-    prompt: str | None = None
+    prompt: str | None = Field(default=None, description="A new picture description for this scene")
+    motion: str | None = Field(default=None, max_length=300,
+                               description="New motion text (AI motion): e.g. gentler actions after a clip went wrong")
+    keep_image: bool = Field(default=False, description="Keep the picture and only animate it again (new motion seed)")
 
 
 @app.post("/api/jobs/{job_id}/scenes/{index}/regenerate")
@@ -600,7 +603,8 @@ async def regenerate_scene(job_id: str, index: int, req: RegenerateRequest = Reg
         raise HTTPException(400, "Slideshow images are your own — replace them with Edit & re-run")
     if not job["result"] or not 0 <= index < len(job["result"].get("images", [])):
         raise HTTPException(400, "scene has no image to regenerate")
-    task = lambda j, job_dir, report: pipeline.regenerate_scene(j, job_dir, report, comfy, index, req.prompt)
+    task = lambda j, job_dir, report: pipeline.regenerate_scene(j, job_dir, report, comfy, index, req.prompt,
+                                                                req.motion, req.keep_image)
     return runner.enqueue(job_id, task, stage=f"scene {index + 1}")
 
 
