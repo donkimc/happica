@@ -17,6 +17,15 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
     seeds = [seed + i for i in range(n)]
     paths = [job_dir / f"image_{i + 1}.png" for i in range(n)]
     ch = character.load(s.get("character", ""))
+    if s.get("turnaround") and ch:  # 3면도: front, then side and back from it, side by side
+        out, outfits = [], []
+        for k, (p, sd) in enumerate(zip(paths, seeds)):
+            files, outfit = await character.turnaround(comfy, ch, s, p, sd,
+                                                       lambda stage, prog, k=k: report(stage + (f" ({k + 1}/{n})" if n > 1 else ""), prog))
+            out += files
+            outfits.append(outfit)
+        return {"images": [str(p.relative_to(OUTPUTS_DIR)) for p in out], "seeds": seeds, "seed": seed, "turnaround": True,
+                "outfits": outfits}
     if ch and ch.get("kind") == "art":  # a cartoon character: IP-Adapter from its pictures, plus its look
         from . import script
 

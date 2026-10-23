@@ -90,7 +90,11 @@ export interface ImageSettings {
   count: number;
   character?: string; // a character job id
   image_model?: ImageModel;
+  texture?: Texture | null;
 }
+
+// 인물 질감: smooth = a short AI pass for softer skin; detailed = sharpened with a fine grain; none = as drawn
+export type Texture = "smooth" | "natural" | "detailed";
 
 export interface VoiceSettings {
   text: string;
@@ -236,8 +240,13 @@ export async function uploadImage(file: File): Promise<{ path: string; width: nu
   return fetch("/api/uploads", { method: "POST", body: form }).then((r) => json(r));
 }
 export const createImages = (settings: ImageSettings) => post("/api/images", settings).then((r) => json<Job>(r));
-export const createCharacter = (c: { name: string; photo: string; kind: string; look: string; consent: boolean; refs?: string[]; style?: string }) =>
+export const createCharacter = (c: { name: string; photo: string; kind: string; look: string; consent: boolean; refs?: string[]; style?: string; texture?: Texture | null }) =>
   post("/api/characters", c).then((r) => json<Job>(r));
+/** 3면도: a front / side / back sheet of a character (an image job) */
+export const createTurnaround = (id: string, texture?: Texture | null) =>
+  post(`/api/characters/${id}/turnaround`, { count: 1, texture: texture || null }).then((r) => json<Job>(r));
+/** Cartoon characters: use a 3-view sheet's pictures as the reference pictures */
+export const useViewsAsRefs = (id: string, job: string) => post(`/api/characters/${id}/refs`, { job }).then((r) => json<Job>(r));
 export const createVoiceover = (settings: VoiceSettings) => post("/api/voiceover", settings).then((r) => json<Job>(r));
 export const createSfx = (settings: SfxSettings) => post("/api/sfx", settings).then((r) => json<Job>(r));
 export const createMusic = (settings: MusicSettings) => post("/api/music", settings).then((r) => json<Job>(r));

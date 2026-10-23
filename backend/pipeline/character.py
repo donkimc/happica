@@ -72,7 +72,8 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
         prompts = [p.format(name=ch["name"], look=ch.get("look", "")).replace(", ,", ",") for p in ART_SHEET]
         seed = random.randrange(2**32)
         paths = [job_dir / f"sheet_{i + 1}.png" for i in range(len(prompts))]
-        settings = {"width": 512, "height": 512, "style": ch.get("style") or "cute 2D children's picture book illustration, clean outlines"}
+        settings = {"width": 512, "height": 512, "texture": ch.get("texture"),
+                    "style": ch.get("style") or "cute 2D children's picture book illustration, clean outlines"}
         await image.generate_batch(comfy, prompts, settings, paths, [seed + i for i in range(len(prompts))],
                                    on_progress=lambda p: report("drawing the character sheet", p),
                                    art=[{"id": job["id"], **ch}] * len(prompts))
@@ -82,7 +83,73 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
     seed = random.randrange(2**32)
     paths = [job_dir / f"sheet_{i + 1}.png" for i in range(len(prompts))]
     # 768 px: at 512 the eyes are only ~25 px across and SDXL-Turbo often draws them mismatched (two colours/shapes)
-    settings = {"width": 768, "height": 768, "style": "photorealistic, 35mm photo, detailed skin"}
+    settings = {"width": 768, "height": 768, "texture": ch.get("texture"), "style": "photorealistic, 35mm photo, detailed skin"}
     await image.generate_batch(comfy, prompts, settings, paths, [seed + i for i in range(len(prompts))],
                                on_progress=lambda p: report("drawing the character sheet", p), character=ch)
     return {"images": [str(p.relative_to(OUTPUTS_DIR)) for p in paths], "seed": seed}
+
+
+# ---------- 3면도: a front / side / back turnaround sheet ----------
+# One wide picture with "front, side and back view" doesn't work: SDXL-Turbo fills a wide canvas with 8–14 figures.
+# So the front view is drawn first (with the face photo or the cartoon references), then the side and back views are
+# drawn with IP-Adapter on that front view, which carries the face, outfit and colours over. The three are then put
+# side by side.
+
+VIEW_SIZE = (576, 1024)
+VIEWS = {"front": "front view, facing the camera", "side": "side view, profile, facing to the side",
+         "back": "back view, seen from behind, facing away from the camera"}
+# no "character sheet" words: they make the model draw a whole design page (many figures, fake text) in each view
+POSE = "full body, standing alone, standing straight, arms relaxed, plain white background, nothing else in the picture"
+# The front view steers the side and back views only from 35% of the drawing on (the prompt sets the pose first —
+# from the start it copies the front-facing pose). They don't use the face photo: on the side view it overrode the
+# front view's outfit (another top, shorts), so the side view's face comes from the front view too.
+VIEW_WEIGHT, VIEW_START = 0.8, 0.25
+
+
+def _view_prompt(ch: dict, view: str, outfit: str = "") -> str:
+    rest = f"{VIEWS[view]}, {POSE}" + (f", wearing {outfit}" if outfit else "")
+    if ch.get("kind") == "art":
+        return f"{ch['name']} ({ch.get('look', '')}), {rest}"
+    return prompt_for(rest, {**ch, "name": ""})
+
+
+async def turnaround(comfy: ComfyClient, ch: dict, settings: dict, out: Path, seed: int, report) -> list[Path]:
+    """Draw one 3-view sheet; returns [sheet, front, side, back]."""
+    from PIL import Image
+
+    s = {**settings, "width": VIEW_SIZE[0], "height": VIEW_SIZE[1]}
+    if ch.get("kind") != "art":
+        s["style"] = settings.get("style") or "photorealistic, studio photo"
+    else:
+        s["style"] = settings.get("style") or ch.get("style") or "cute 2D children's picture book illustration, clean outlines"
+    paths = {v: out.with_name(f"{out.stem}_{v}.png") for v in VIEWS}
+    art = ch.get("kind") == "art"
+    report("drawing the front view", 0.0)
+    await image.generate_batch(comfy, [_view_prompt(ch, "front")], s, [paths["front"]], [seed],
+                               on_progress=lambda p: report("drawing the front view", p * 0.4),
+                               **({"art": [ch]} if art else {"character": ch}))
+    front_ref = {"id": f"{out.parent.name}_{out.stem}_front", "name": ch["name"],
+                 "refs": [str(paths["front"].relative_to(OUTPUTS_DIR))]}
+    # The front view's clothes, read by the vision model, are written into the side and back prompts: the
+    # front-view reference alone didn't hold them (the side view came out in another top and shorts)
+    report("reading the outfit", 0.4)
+    try:
+        from . import vision
+
+        outfit = await vision.outfit(paths["front"])
+    except Exception:  # the vision model is optional: without it the reference picture alone carries the outfit
+        outfit = ""
+    side_back = ["side", "back"]
+    await image.generate_batch(comfy, [_view_prompt(ch, v, outfit) for v in side_back], {**s, "art_weight": VIEW_WEIGHT, "art_start": VIEW_START},
+                               [paths[v] for v in side_back], [seed + 1, seed + 2],
+                               on_progress=lambda p: report("drawing the side and back views", 0.4 + p * 0.6),
+                               art=[front_ref, front_ref],
+                               **({} if art else {"character": ch, "with_face": [False, False]}))
+    views = [Image.open(paths[v]).convert("RGB") for v in VIEWS]
+    sheet = Image.new("RGB", (sum(v.width for v in views), views[0].height), "white")
+    x = 0
+    for v in views:
+        sheet.paste(v, (x, 0))
+        x += v.width
+    sheet.save(out)
+    return [out, *paths.values()], outfit

@@ -1,6 +1,7 @@
 """Happica backend: REST + WebSocket API in front of ComfyUI."""
 import asyncio
 import io
+import shutil
 import uuid
 from contextlib import asynccontextmanager
 
@@ -220,6 +221,10 @@ class JobRequest(BaseModel):
     image_steps: int = Field(default=4, ge=1, le=8)
     image_model: str = Field(default="turbo", pattern="^(turbo|lightning|flux|zimage)$",
                              description="turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
+    texture: str | None = Field(default=None, pattern="^(smooth|detailed)$",
+                                description="인물 질감: smooth = a short extra AI pass for softer skin (Turbo/Lightning; FLUX and "
+                                            "Z-Image get smoothing words only); detailed = sharpened with a fine film grain. "
+                                            "Omit to keep the picture as drawn")
     video_steps: int = Field(default=8, ge=4, le=30)
     ltx_steady: bool = Field(default=True, description="AI motion: steadier sampling (euler, light input compression); "
                                                        "faces and eyes wobble less")
@@ -472,6 +477,10 @@ class ImageRequest(BaseModel):
     image_steps: int = Field(default=4, ge=1, le=8)
     image_model: str = Field(default="turbo", pattern="^(turbo|lightning|flux|zimage)$",
                              description="turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
+    texture: str | None = Field(default=None, pattern="^(smooth|detailed)$",
+                                description="인물 질감: smooth = a short extra AI pass for softer skin (Turbo/Lightning; FLUX and "
+                                            "Z-Image get smoothing words only); detailed = sharpened with a fine film grain. "
+                                            "Omit to keep the picture as drawn")
     seed: int | None = None
 
 
@@ -491,6 +500,10 @@ class CharacterRequest(BaseModel):
     refs: list[str] = Field(default_factory=list, max_length=3, description="art: 1-3 uploaded pictures of the character")
     look: str = Field(default="", max_length=300, description="Hair, colours, clothes… spelled out in every prompt")
     style: str = Field(default="", max_length=300, description="art: the drawing style of the character sheet")
+    texture: str | None = Field(default=None, pattern="^(smooth|detailed)$",
+                                description="인물 질감: smooth = a short extra AI pass for softer skin (Turbo/Lightning; FLUX and "
+                                            "Z-Image get smoothing words only); detailed = sharpened with a fine film grain. "
+                                            "Omit to keep the picture as drawn")
     consent: bool = Field(default=False, description="Real people only: the photo is of you or someone who agreed")
 
 
@@ -511,6 +524,51 @@ async def create_character(req: CharacterRequest):
     if path.parent != UPLOADS.resolve() or not path.is_file():
         raise HTTPException(400, "Upload a photo first")
     return runner.submit(req.name, req.model_dump(), "character")
+
+
+class TurnaroundRequest(BaseModel):
+    count: int = Field(default=1, ge=1, le=2, description="How many sheets (variations) to draw")
+    image_model: str = Field(default="turbo", pattern="^(turbo|lightning)$", description="Characters need an SDXL model")
+    texture: str | None = Field(default=None, pattern="^(smooth|detailed)$")
+    seed: int | None = None
+
+
+@app.post("/api/characters/{character_id}/turnaround")
+async def create_turnaround(character_id: str, req: TurnaroundRequest = TurnaroundRequest()):
+    """3면도: a front / side / back sheet of a character, also cut into three pictures."""
+    ch = character.load(character_id)
+    if not ch:
+        raise HTTPException(404, "character not found")
+    settings = {"prompt": f"{ch['name']} 3-view sheet", "character": character_id, "turnaround": True,
+                "width": character.VIEW_SIZE[0], "height": character.VIEW_SIZE[1], "style": "",
+                **req.model_dump()}
+    return runner.submit(f"{ch['name']} 3-view sheet", settings, "image")
+
+
+class UseViews(BaseModel):
+    job: str = Field(description="A finished 3-view sheet job of this character")
+
+
+@app.post("/api/characters/{character_id}/refs")
+async def use_turnaround_as_refs(character_id: str, req: UseViews):
+    """Cartoon characters: use a 3-view sheet's front, side and back pictures as the reference pictures, so
+    scenes keep the character from every angle."""
+    job = _get_or_404(character_id)
+    if job["kind"] != "character" or job["settings"].get("kind") != "art":
+        raise HTTPException(400, "Only cartoon (art) characters use reference pictures")
+    sheet = store.get(req.job)
+    if not sheet or sheet["settings"].get("character") != character_id or not (sheet["result"] or {}).get("turnaround"):
+        raise HTTPException(400, "Pick a finished 3-view sheet of this character")
+    views = [p for p in sheet["result"]["images"] if p.endswith(("_front.png", "_side.png", "_back.png"))][:3]
+    # copies: the character keeps its references even if the sheet's job is deleted later
+    UPLOADS.mkdir(parents=True, exist_ok=True)
+    refs = []
+    for v in views:
+        copy = UPLOADS / f"{uuid.uuid4().hex[:16]}.png"
+        shutil.copyfile(OUTPUTS_DIR / v, copy)
+        refs.append(str(copy.relative_to(OUTPUTS_DIR)))
+    settings = {**job["settings"], "refs": refs, "photo": refs[0]}
+    return store.update(character_id, settings=settings)
 
 
 def _check_character(character_id: str) -> None:

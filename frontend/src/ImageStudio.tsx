@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cancelJob, createImages, deleteJob, Health, ImageModel, ImageSettings, isActive, SLOW_MODELS, Job, outputUrl, rerunJob } from "./api";
+import { cancelJob, createImages, deleteJob, Health, ImageModel, ImageSettings, isActive, SLOW_MODELS, Texture, Job, outputUrl, rerunJob } from "./api";
 
 export const IMAGE_DEFAULTS: ImageSettings = { prompt: "", style: "", width: 768, height: 512, count: 4 };
 
@@ -94,6 +94,15 @@ export default function ImageStudio({ characters, jobs, health, upsert, remove, 
               <option value="lightning">Lightning (fast, cleaner scenes)</option>
               <option value="flux" disabled={!!settings.character}>FLUX (detailed, ~5 min a picture)</option>
               <option value="zimage" disabled={!!settings.character}>Z-Image (best detail, ~4 min a picture)</option>
+            </select>
+          </label>
+          <label>
+            Texture
+            <select value={settings.texture ?? ""} onChange={(e) => set({ texture: (e.target.value || null) as Texture | null })}
+                    title="인물 질감: skin, hair and fabric">
+              <option value="">As drawn</option>
+              <option value="smooth">Smooth (soft skin)</option>
+              <option value="detailed">Detailed (sharp, fine grain)</option>
             </select>
           </label>
           <label>

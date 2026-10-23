@@ -35,6 +35,13 @@ ART_WEIGHT = 0.7  # IP-Adapter strength: higher copies the reference pose too, l
 ART_STEPS = 6  # like PhotoMaker, the extra conditioning needs a couple more turbo steps
 ART_START = 0.15  # the first steps follow only the prompt (layout, pose, setting), so the reference picture's pose and plain background don't take over
 NEGATIVE = "blurry, low quality, distorted, text, watermark"
+# Texture (인물 질감), tested on real-person portraits:
+#   smooth   — a short AI pass over each finished picture with smoothing words (redraws the last 30%): softer skin
+#   (none)   — the picture as drawn
+#   detailed — sharpened, with a fine luminance grain: skin, hair and fabric read as more textured. (An AI redraw
+#              asking for "visible pores" didn't work: Turbo smooths skin whatever the words, even after enlarging.)
+SMOOTH = ("smooth flawless skin, soft even shading, clean airbrushed finish", 0.30)
+TEXTURES = ("smooth", "detailed")
 PER_SCENE = ("positive", "sampler", "decode", "save")  # duplicated per scene; the other nodes are shared
 
 
@@ -44,7 +51,7 @@ CHARACTER_STEPS = 6  # PhotoMaker needs a couple more turbo steps to settle the 
 FACE_START = 0.4
 
 
-def _art_nodes(wf: dict, key: str, refs: list[str], weight: float) -> None:
+def _art_nodes(wf: dict, key: str, refs: list[str], weight: float, start: float = ART_START) -> None:
     """Shared IP-Adapter loaders plus, for one art character, its reference pictures and its adapted model `apply_<key>`."""
     if "ipa_loader" not in wf:
         wf["ipa_loader"] = copy.deepcopy(IPADAPTER["ipa_loader"])
@@ -58,7 +65,7 @@ def _art_nodes(wf: dict, key: str, refs: list[str], weight: float) -> None:
             wf[f"refs_{key}_{k}"] = {"class_type": "ImageBatch", "inputs": {"image1": prev, "image2": [f"ref_{key}_{k}", 0]}}
             prev = [f"refs_{key}_{k}", 0]
     apply = copy.deepcopy(IPADAPTER["apply"])
-    apply["inputs"].update(image=prev, weight=weight, start_at=ART_START)
+    apply["inputs"].update(image=prev, weight=weight, start_at=start)
     wf[f"apply_{key}"] = apply
 
 
@@ -93,10 +100,15 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
     art = art or [None] * len(prompts)
     for key, refs in (art_refs or {}).items():
         if key in art:
-            _art_nodes(wf, key, refs, float(settings.get("art_weight", ART_WEIGHT)))
+            _art_nodes(wf, key, refs, float(settings.get("art_weight", ART_WEIGHT)), float(settings.get("art_start", ART_START)))
     if any(art):
         wf["sigmas_art"] = copy.deepcopy(base["sigmas"])
         wf["sigmas_art"]["inputs"]["steps"] = ART_STEPS
+
+    smooth = settings.get("texture") == "smooth"
+    if smooth:
+        wf["sigmas_tex"] = copy.deepcopy(base["sigmas"])
+        wf["sigmas_tex"]["inputs"].update(steps=4, denoise=SMOOTH[1])
 
     style = settings.get("style", "").strip()
     for i, (prompt, seed, name) in enumerate(zip(prompts, seeds, names)):
@@ -119,14 +131,46 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
             branch[f"positive_{i}"] = {"class_type": "ConditioningCombine", "inputs": {
                 "conditioning_1": [f"plain_range_{i}", 0], "conditioning_2": [f"face_range_{i}", 0]}}
             branch[f"sampler_{i}"]["inputs"]["sigmas"] = ["sigmas_face", 0]
+            if art[i]:  # face plus a reference picture (a 3-view sheet's side view: the front view's outfit)
+                branch[f"sampler_{i}"]["inputs"]["model"] = [f"apply_{art[i]}", 0]
         else:
             branch[f"positive_{i}"]["inputs"]["text"] = text
             if art[i]:  # this scene shows an art character: sample with its IP-Adapter model
                 branch[f"sampler_{i}"]["inputs"].update(model=[f"apply_{art[i]}", 0], sigmas=["sigmas_art", 0])
         branch[f"sampler_{i}"]["inputs"]["noise_seed"] = seed
         branch[f"save_{i}"]["inputs"]["filename_prefix"] = f"happica/{name}"
+        if smooth:
+            _smooth_pass(wf, branch, i, text, seed, face and with_face[i])
         wf.update(branch)
     return wf
+
+
+def _smooth_pass(wf: dict, branch: dict, i: int, text: str, seed: int, face: bool) -> None:
+    """Redraw the last part of scene i with smoothing words: a second sampler starts from the first one's result."""
+    tex_text = f"{text}, {SMOOTH[0]}"
+    if face:  # keep the face: the pass is conditioned on the photo too
+        wf[f"tex_cond_{i}"] = {"class_type": "PhotoMakerEncode", "inputs": {
+            "photomaker": ["photomaker", 0], "image": ["face", 0], "clip": ["ckpt", 1], "text": tex_text}}
+    else:
+        wf[f"tex_cond_{i}"] = {"class_type": "CLIPTextEncode", "inputs": {"clip": ["ckpt", 1], "text": tex_text}}
+    first = branch[f"sampler_{i}"]["inputs"]
+    wf[f"tex_sampler_{i}"] = {"class_type": "SamplerCustom", "inputs": {
+        "model": first["model"], "add_noise": True, "noise_seed": seed + 1, "cfg": 1.0,
+        "positive": [f"tex_cond_{i}", 0], "negative": first["negative"], "sampler": first["sampler"],
+        "sigmas": ["sigmas_tex", 0], "latent_image": [f"sampler_{i}", 0]}}
+    branch[f"decode_{i}"]["inputs"]["samples"] = [f"tex_sampler_{i}", 0]
+
+
+def add_texture(path: Path, seed: int = 0) -> None:
+    """"detailed" texture: unsharp mask plus a fine luminance grain, in place."""
+    import numpy as np
+    from PIL import Image, ImageFilter
+
+    with Image.open(path) as img:
+        sharp = img.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.6, percent=70, threshold=2))
+    a = np.asarray(sharp).astype(np.float32)
+    a += np.random.default_rng(seed).normal(0, 5.0, a.shape[:2])[..., None]
+    Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).save(path)
 
 
 def _flow_workflow(template: dict, prompts: list[str], seeds: list[int], names: list[str], settings: dict,
@@ -143,7 +187,8 @@ def _flow_workflow(template: dict, prompts: list[str], seeds: list[int], names: 
             for key, value in node["inputs"].items():
                 if isinstance(value, list) and value[0] in PER_SCENE:
                     node["inputs"][key] = [f"{value[0]}_{i}", value[1]]
-        branch[f"positive_{i}"]["inputs"]["text"] = f"{prompt}, {style}" if style else prompt
+        words = SMOOTH[0] if settings.get("texture") == "smooth" else ""  # FLUX / Z-Image: smoothing words only
+        branch[f"positive_{i}"]["inputs"]["text"] = ", ".join(x for x in (prompt, style, words) if x)
         branch[f"sampler_{i}"]["inputs"].update(seed=seed, steps=steps)
         branch[f"save_{i}"]["inputs"]["filename_prefix"] = f"happica/{name}"
         wf.update(branch)
@@ -194,6 +239,8 @@ async def generate_batch(
         img = images[0]
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(await comfy.download(img["filename"], img["subfolder"], img["type"]))
+        if settings.get("texture") == "detailed":
+            add_texture(out_path, seeds[i])
     return out_paths
 
 

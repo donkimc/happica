@@ -89,3 +89,15 @@ def _in_language(lines: list[str], language: str) -> bool:
 
     script = SCRIPTS.get(language)
     return not script or all(re.search(script, line) for line in lines if line)
+
+
+OUTFIT = ("List only what this character is wearing and carrying — clothes, colours, shoes, accessories — as a short "
+          "comma-separated phrase of at most 20 words, in English. No body, face, pose or background.")
+
+
+async def outfit(path: Path) -> str:
+    """What the character in a picture wears, as prompt words (for 3-view sheets: the side and back views)."""
+    async with httpx.AsyncClient(timeout=180) as client:
+        text = await _chat(client, {"keep_alive": 0, "options": {"temperature": 0.2},
+                                    "messages": [{"role": "user", "content": OUTFIT, "images": [_image_b64(path)]}]})
+    return PREAMBLE.sub("", text).strip().strip(".")[:200]

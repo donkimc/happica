@@ -380,6 +380,17 @@ async def create_story_batch(batch: StoryBatch, request: Request):
     return {"jobs": jobs, "ids": [j["id"] for j in jobs]}
 
 
+@router.post("/characters/{character_id}/turnaround", status_code=202,
+             summary="3면도: a front / side / back sheet of a character (also cut into three pictures)")
+async def create_turnaround(character_id: str, request: Request, req: main.TurnaroundRequest = main.TurnaroundRequest()):
+    return _submit(await main.create_turnaround(character_id, req), request)
+
+
+@router.post("/characters/{character_id}/refs", summary="Cartoon characters: use a 3-view sheet's pictures as references")
+async def use_turnaround_as_refs(character_id: str, req: main.UseViews, request: Request):
+    return public(await main.use_turnaround_as_refs(character_id, req), _base_url(request))
+
+
 @router.post("/uploads", summary="Upload a picture (for slides, characters or upscaling) or a video (for upscaling); returns its path")
 async def upload(file: UploadFile = File(...)):
     ext = Path(file.filename or "").suffix.lower()

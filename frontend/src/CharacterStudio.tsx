@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cancelJob, createCharacter, createImages, deleteJob, isActive, Job, outputUrl, uploadImage } from "./api";
+import { cancelJob, createCharacter, createImages, createTurnaround, deleteJob, isActive, Job, outputUrl, Texture, uploadImage, useViewsAsRefs } from "./api";
 import { IMAGE_DEFAULTS } from "./ImageStudio";
 
 export interface CharacterSettings {
@@ -212,6 +212,7 @@ function ArtForm({ refs, setRefs, act, error, onCreate }: {
 function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; changes: Job[]; upsert: Props["upsert"]; remove: Props["remove"]; act: Props["act"] }) {
   const s = job.settings as unknown as CharacterSettings;
   const [change, setChange] = useState("");
+  const [texture, setTexture] = useState<Texture | "">("");
   const active = isActive(job);
   const sheet = (job.result?.images ?? []) as string[];
   const ready = job.state === "done";
@@ -268,12 +269,27 @@ function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; change
                   const style = s.kind === "art" ? s.style || ART_STYLE : "photorealistic, 35mm photo";
                   // real faces at 768 px: at 512 the eyes are tiny and often come out mismatched
                   const size = s.kind === "art" ? 512 : 768;
-                  upsert(await createImages({ ...IMAGE_DEFAULTS, prompt, width: size, height: size, count: 2, style, character: job.id }));
+                  upsert(await createImages({ ...IMAGE_DEFAULTS, prompt, width: size, height: size, count: 2, style, character: job.id,
+                                              texture: texture || null }));
                   setChange("");
                 })
               }
             >
               Create
+            </button>
+          </div>
+          <div className="row tight">
+            <label>
+              Texture
+              <select value={texture} onChange={(e) => setTexture(e.target.value as Texture | "")} title="인물 질감: skin, hair and fabric">
+                <option value="">As drawn</option>
+                <option value="smooth">Smooth (soft skin)</option>
+                <option value="detailed">Detailed (sharp, fine grain)</option>
+              </select>
+            </label>
+            <button className="secondary" onClick={() => act(async () => upsert(await createTurnaround(job.id, texture || null)))}
+                    title="Front, side and back views (about 2 min)">
+              3-view sheet (3면도)
             </button>
           </div>
           <div className="suggestion-group quick">
@@ -292,13 +308,29 @@ function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; change
             {cj.settings.prompt as string} {isActive(cj) ? `— ${cj.stage || "waiting"}…` : ""}
             {cj.error ? <span className="error"> {cj.error}</span> : null}
           </div>
-          <div className="grid">
-            {((cj.result?.images ?? []) as string[]).map((src) => (
-              <a key={src} href={outputUrl(cj, src)} target="_blank" rel="noreferrer">
-                <img src={outputUrl(cj, src)} alt={cj.settings.prompt as string} />
-              </a>
-            ))}
-          </div>
+          {(cj.result as unknown as { turnaround?: boolean })?.turnaround ? (
+            <>
+              {((cj.result?.images ?? []) as string[]).filter((src) => !/_(front|side|back)\.png$/.test(src)).map((src) => (
+                <a key={src} href={outputUrl(cj, src)} target="_blank" rel="noreferrer">
+                  <img className="turnaround" src={outputUrl(cj, src)} alt={`${s.name} front, side and back`} />
+                </a>
+              ))}
+              {s.kind === "art" && cj.state === "done" && (
+                <button className="link" onClick={() => act(async () => upsert(await useViewsAsRefs(job.id, cj.id)))}
+                        title="Scenes will be drawn from these three views">
+                  Use these views as {s.name}'s reference pictures
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="grid">
+              {((cj.result?.images ?? []) as string[]).map((src) => (
+                <a key={src} href={outputUrl(cj, src)} target="_blank" rel="noreferrer">
+                  <img src={outputUrl(cj, src)} alt={cj.settings.prompt as string} />
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       ))}
 
