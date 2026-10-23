@@ -90,9 +90,24 @@ def _pin_last_frame(wf: dict) -> None:
     wf["decode"]["inputs"]["samples"] = ["crop_guides", 2]
 
 
+# LTX-Video 2B was trained around 768×512; on a 16 GB Mac 576×1024 clips take 18–25 min. By default (ltx_short_side)
+# clips are drawn with this short side (512×896 → 384×672) and scaled back to the scene size — faster, but a
+# two-character scene at 448×768 drifted and warped eyes in a test, so stories that need it draw at full size.
+LTX_SHORT_SIDE = 384
+
+
+def ltx_size(w: int, h: int, short_side: int = LTX_SHORT_SIDE) -> tuple[int, int]:
+    """The size LTX draws at: the scene size shrunk to `short_side` (never enlarged), in multiples of 32."""
+    f = min(1.0, short_side / min(w, h))
+    return max(32, round(w * f / 32) * 32), max(32, round(h * f / 32) * 32)
+
+
 async def ltx(comfy: ComfyClient, image: Path, prompt: str, settings: dict, out_path: Path,
               seconds: float, seed: int, on_progress: Callable[[float], None]) -> Path:
     w, h = settings["width"], settings["height"]
+    # jobs made before this setting (no key) keep drawing at the full scene size; None also means full size
+    short = settings.get("ltx_short_side")
+    gw, gh = ltx_size(w, h, short) if short else (w, h)
     gen = min(seconds, LTX_MAX_SECONDS)
     # LTX needs 8k+1 frames; generate at least the clip length, then trim to it exactly
     frames = 8 * max(1, round(gen * FPS / 8)) + 1
@@ -102,7 +117,7 @@ async def ltx(comfy: ComfyClient, image: Path, prompt: str, settings: dict, out_
     style = settings.get("style", "").strip()
     wf["positive"]["inputs"]["text"] = f"{prompt}, {LTX_MOTION_HINT}" + (f", {style}" if style else "")
     wf["negative"]["inputs"]["text"] = LTX_NEGATIVE
-    wf["i2v"]["inputs"].update(width=w, height=h, length=frames)
+    wf["i2v"]["inputs"].update(width=gw, height=gh, length=frames)
     wf["sigmas"]["inputs"]["steps"] = settings.get("video_steps", 8)
     wf["sampler"]["inputs"]["noise_seed"] = seed
     if settings.get("ltx_steady", True):

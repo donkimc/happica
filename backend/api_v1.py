@@ -298,8 +298,9 @@ class StoryRequest(BaseModel):
     motion: str = Field(default="kenburns", pattern="^(kenburns|ltx|none)$")
     scenes: list[StoryScene] = Field(min_length=1, max_length=16)
     song: StorySong | None = None
-    width: int = Field(default=576, ge=256, le=1024, multiple_of=64)
-    height: int = Field(default=1024, ge=256, le=1024, multiple_of=64)
+    width: int = Field(default=512, ge=256, le=1024, multiple_of=64,
+                       description="Picture size; 512×896 (9:16) is the smallest the picture models handle well")
+    height: int = Field(default=896, ge=256, le=1024, multiple_of=64)
     output_height: int | None = Field(default=1920, ge=256, le=2160)
     upscale: str = Field(default="fast", pattern="^(fast|ai|anime)$",
                          description="fast = resize; ai = Real-ESRGAN general; anime = Real-ESRGAN for cartoons (best for this art)")
@@ -312,6 +313,8 @@ class StoryRequest(BaseModel):
     caption: str = Field(default="", max_length=2000, description="Text for caption.txt, between the title and hashtags")
     ltx_steady: bool = Field(default=True, description="AI motion: steadier sampling; faces and eyes wobble less")
     ltx_end_frame: bool = Field(default=True, description="AI motion: each clip ends on its clean picture")
+    ltx_short_side: int | None = Field(default=384, ge=256, le=1024,
+                                       description="AI motion draw size (short side); null = the full scene size")
     image_model: str = Field(default="turbo", pattern="^(turbo|lightning|flux|zimage)$",
                              description="turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
     seed: int | None = None
@@ -340,7 +343,8 @@ def _story_settings(story: StoryRequest, song_track: str = "") -> main.JobReques
         narrate=any(sc.narration.strip() for sc in story.scenes), subtitles=story.subtitles, width=story.width,
         height=story.height, output_height=story.output_height, upscale=story.upscale, clip_seconds=story.clip_seconds,
         fade=story.fade, music_volume=story.music_volume, caption_style=story.caption_style, seed=story.seed, song=song,
-        image_model=story.image_model, ltx_steady=story.ltx_steady, ltx_end_frame=story.ltx_end_frame)
+        image_model=story.image_model, ltx_steady=story.ltx_steady, ltx_end_frame=story.ltx_end_frame,
+        ltx_short_side=story.ltx_short_side)
     return req
 
 

@@ -232,6 +232,8 @@ scripts/start.sh</code></pre>
     <table>
       <thead><tr><th>Step</th><th>Time</th></tr></thead>
       <tbody>
+        <tr><td>Pictures at 512×896 (the 9:16 default)</td><td>Turbo ~20 s each (3 in 57 s, with loading); Z-Image ~3.3 min each</td></tr>
+        <tr><td>AI motion, one 3-second scene</td><td>~5 min at <strong>Fast</strong> size (drawn at 384×672, then enlarged); ~15–25 min at full size, which stays steadier with several characters</td></tr>
         <tr><td><strong>A whole 9:16 story</strong> (new sung song, 9 scenes, narration, 9 sound effects, pan &amp; zoom, 1080×1920)</td><td>~7.5 min</td></tr>
         <tr><td>Using a song with lyrics for the first time (voice/music split + lyric timing)</td><td>~1 min, then stored with the song</td></tr>
         <tr><td>Scene sound effects</td><td>~20 s for 9</td></tr>
@@ -332,7 +334,7 @@ scripts/start.sh</code></pre>
   <p>Sung lyrics appear as <span style="color:#d4a600;font-weight:600">yellow</span> subtitles, timed to the singing; narration subtitles stay white. To time them, Happica separates the voice from the music (Demucs) and listens to it with Whisper, then lines up the lyrics you wrote syllable by syllable — your words are shown, not Whisper's guesses. This takes about a minute the first time a song is used; after that it's stored with the song (and Music Videos show sung lyrics too).</p>
 
   <h2 id="tiktok">TikTok 9:16 videos and captions</h2>
-  <p>The <strong>TikTok story 9:16</strong> preset makes pictures at 576×1024 (the largest portrait size the image model draws well) and exports the finished video at <strong>1080×1920</strong>. Captions are drawn after enlarging, so they stay sharp. <em>Fast resize</em> takes seconds; <em>AI upscale</em> (Real-ESRGAN) adds detail but takes about a second per frame — ~25 minutes for a 1-minute video.</p>
+  <p>The <strong>TikTok story 9:16</strong> preset makes pictures at 512×896 (the smallest portrait size the picture models handle well — smaller sizes break the pictures, they don't just blur them) and exports the finished video at <strong>1080×1920</strong>. Captions are drawn after enlarging, so they stay sharp. <em>Fast resize</em> takes seconds; <em>AI upscale</em> (Real-ESRGAN) adds detail but takes about a second per frame — ~25 minutes for a 1-minute video.</p>
   <p><strong>Captions &amp; export</strong> in My script sets the caption font — <em>Rounded</em> (Jua) or <em>Handwritten</em> (Gamja Flower), both friendly Korean faces, or the plain system font — the size, bottom or lower-third position, and an optional dark box behind the text. On portrait videos a narration line shows as one or two lines at a time, split at sentence ends, instead of many quick flashes.</p>
 
   <h2 id="voice">Voiceover</h2>

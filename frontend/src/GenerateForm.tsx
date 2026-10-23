@@ -259,7 +259,8 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
             <option value="768x512">768×512 (landscape)</option>
             <option value="512x768">512×768 (portrait)</option>
             <option value="512x512">512×512 (square)</option>
-            <option value="576x1024">576×1024 (9:16, TikTok)</option>
+            <option value="512x896">512×896 (9:16, TikTok)</option>
+            <option value="576x1024">576×1024 (9:16, larger)</option>
           </select>
         </label>
         {!pictures && !musicVideo && !scripted && (
@@ -373,7 +374,17 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
       </div>
 
       {settings.motion === "ltx" && (
-        <p className="muted">AI motion renders each scene with LTX-Video on your GPU — about 6–7 minutes per scene.</p>
+        <label className="check-row">
+          Motion size{" "}
+          <select value={settings.ltx_short_side === null ? "full" : "fast"}
+                  onChange={(e) => set({ ltx_short_side: e.target.value === "full" ? null : 384 })}>
+            <option value="fast">Fast — drawn at 384 px, then enlarged (~5 min a scene)</option>
+            <option value="full">Full size — steadier with several characters (~15–25 min a scene)</option>
+          </select>
+        </label>
+      )}
+      {settings.motion === "ltx" && (
+        <p className="muted">AI motion renders each scene with LTX-Video on your GPU — about 5 minutes per 3-second scene at Fast size.</p>
       )}
       {settings.narrate && settings.voice[0] !== "a" && settings.voice[0] !== "b" && (
         <p className="muted">Write the narration in the voice's language — the voice reads whatever text it gets.</p>

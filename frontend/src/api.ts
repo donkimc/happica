@@ -170,6 +170,7 @@ export interface JobSettings {
   caption_style?: CaptionStyle | null;
   output_height?: number | null; // e.g. 1920: 576×1024 is exported as 1080×1920
   upscale?: "fast" | "ai";
+  ltx_short_side?: number | null; // AI motion draw size (short side): 384 = fast; null = full scene size
   song_track?: string;
   character?: string; // a character job id
   slides?: { image: string; text: string }[];

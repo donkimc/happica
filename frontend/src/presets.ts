@@ -35,8 +35,8 @@ export const PRESETS: Preset[] = [
   {
     id: "tiktok",
     name: "TikTok story 9:16",
-    hint: "My script at 576×1024, exported 1080×1920 with narration and kid-friendly captions",
-    settings: { scene_mode: "script", width: 576, height: 1024, motion: "kenburns", clip_seconds: 3, narrate: true, subtitles: "burn", output_height: 1920, upscale: "fast" },
+    hint: "My script at 512×896, exported 1080×1920 with narration and kid-friendly captions",
+    settings: { scene_mode: "script", width: 512, height: 896, motion: "kenburns", clip_seconds: 3, narrate: true, subtitles: "burn", output_height: 1920, upscale: "fast" },
   },
 ];
 

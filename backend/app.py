@@ -228,6 +228,10 @@ class JobRequest(BaseModel):
     video_steps: int = Field(default=8, ge=4, le=30)
     ltx_steady: bool = Field(default=True, description="AI motion: steadier sampling (euler, light input compression); "
                                                        "faces and eyes wobble less")
+    ltx_short_side: int | None = Field(default=384, ge=256, le=1024,
+                                       description="AI motion: clips are drawn with this short side (e.g. 384: 512×896 → "
+                                                   "384×672), then scaled to the scene size — much faster. null = draw at "
+                                                   "the full scene size (slower; steadier with several characters)")
     ltx_end_frame: bool = Field(default=True, description="AI motion: pin each clip's last frame to its picture, so the "
                                                           "motion returns to the clean drawing instead of drifting")
     seed: int | None = None

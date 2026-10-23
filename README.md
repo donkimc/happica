@@ -184,6 +184,8 @@ Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves th
 | Images (SDXL-Turbo, 768×512) | ~25 s to load the model once per job, then ~5 s per image |
 | Images (FLUX.1-schnell Q5, 576×1024) | ~40 s to load, then ~4–5 min per image (4 steps at ~45–60 s); 6 scenes: 29.5 min, image ComfyUI peaks ~18 GB |
 | Images (Z-Image Turbo Q5, 576×1024) | ~4 min per image (8 steps at ~27 s); 6 scenes: 24.5 min, peak ~11 GB |
+| Images at 512×896 (the 9:16 default since 10-23) | Turbo: 3 pictures in 57 s with the model load; Z-Image: 3 in 593 s (~3.3 min each) |
+| AI motion, 3 s scene (LTX, `ltx_short_side`) | 384 (default: 512×896 drawn at 384×672, then scaled up): ~5 min per scene, held on-model in a two-character test; `null` = full size: 18–25 min at 576×1024, steadier for hard scenes |
 | Images (SDXL-Lightning vs Turbo, 576×1024) | the same: 6 scenes ~110 s including the model load, peak ~10 GB |
 | Story → scenes (qwen2.5:3b) | ~15 s |
 | Narration (Kokoro) | ~5–10 s per scene |
