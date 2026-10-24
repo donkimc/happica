@@ -534,7 +534,7 @@ async def create_character(req: CharacterRequest):
 
 class TurnaroundRequest(BaseModel):
     count: int = Field(default=1, ge=1, le=2, description="How many sheets (variations) to draw")
-    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|realvis)$", description="Characters need an SDXL model")
+    image_model: str | None = Field(default=None, pattern="^(turbo|lightning|realvis)$", description="Default: realvis for real people (normal body proportions, true side/back views, ~15 min a sheet), turbo for cartoon characters. Characters need an SDXL model")
     texture: str | None = Field(default=None, pattern="^(smooth|detailed)$")
     seed: int | None = None
 
@@ -545,6 +545,8 @@ async def create_turnaround(character_id: str, req: TurnaroundRequest = Turnarou
     ch = character.load(character_id)
     if not ch:
         raise HTTPException(404, "character not found")
+    if not req.image_model:  # Turbo stretches standing bodies; RealVisXL is a photo model, so cartoons stay on Turbo
+        req.image_model = "turbo" if ch.get("kind") == "art" else "realvis"
     settings = {"prompt": f"{ch['name']} 3-view sheet", "character": character_id, "turnaround": True,
                 "width": character.VIEW_SIZE[0], "height": character.VIEW_SIZE[1], "style": "",
                 **req.model_dump()}

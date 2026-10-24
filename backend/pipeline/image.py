@@ -35,7 +35,14 @@ LIGHTNING = {"ckpt_name": "sdxl_lightning_4step.safetensors", "sampler": "euler"
 REALVIS = {"ckpt_name": "RealVisXL_V5.0_fp16.safetensors", "sampler": "dpmpp_2m", "scheduler": "karras", "steps": 25,
            "cfg": 5.0, "face_start": 0.2,
            "negative": "deformed, asymmetric face, crooked eyes, cross-eyed, distorted face, bad anatomy, blurry, lowres, "
-                       "extra fingers, text, watermark"}
+                       "extra fingers, text, watermark, long torso, elongated body, stretched body, disproportionate body"}
+# SDXL's training sizes (~1 megapixel). RealVisXL draws at the one closest to the asked shape, then the picture is
+# scaled to the asked size: drawn directly at 512×896 (below its training size) bodies come out stretched.
+SDXL_SIZES = [(1024, 1024), (896, 1152), (832, 1216), (768, 1344), (640, 1536), (1152, 896), (1216, 832), (1344, 768), (1536, 640)]
+
+
+def native_size(w: int, h: int) -> tuple[int, int]:
+    return min(SDXL_SIZES, key=lambda s: abs(s[0] / s[1] - w / h))
 SDXL_MODELS = ("turbo", "lightning", "realvis")
 IPADAPTER = json.loads((WORKFLOWS_DIR / "ipadapter_t2i.json").read_text())
 ART_WEIGHT = 0.7  # IP-Adapter strength: higher copies the reference pose too, lower drifts off-model
@@ -99,6 +106,7 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
         base["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
             "model": ["ckpt", 0], "scheduler": LIGHTNING["scheduler"], "steps": 4, "denoise": 1.0}}
     elif model == "realvis":
+        base["latent"]["inputs"].update(zip(("width", "height"), native_size(settings["width"], settings["height"])))
         base["ckpt"]["inputs"]["ckpt_name"] = REALVIS["ckpt_name"]
         base["negative"]["inputs"]["text"] = REALVIS["negative"]
         base["sampler_select"]["inputs"]["sampler_name"] = REALVIS["sampler"]
@@ -158,6 +166,11 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
         branch[f"save_{i}"]["inputs"]["filename_prefix"] = f"happica/{name}"
         if smooth:
             _smooth_pass(wf, branch, i, text, seed, face and with_face[i])
+        if model == "realvis" and native_size(settings["width"], settings["height"]) != (settings["width"], settings["height"]):
+            wf[f"scale_{i}"] = {"class_type": "ImageScale", "inputs": {
+                "image": [f"decode_{i}", 0], "upscale_method": "lanczos", "width": settings["width"],
+                "height": settings["height"], "crop": "center"}}
+            branch[f"save_{i}"]["inputs"]["images"] = [f"scale_{i}", 0]
         wf.update(branch)
     return wf
 

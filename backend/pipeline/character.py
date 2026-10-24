@@ -100,7 +100,11 @@ VIEW_SIZE = (576, 1024)
 VIEWS = {"front": "front view, facing the camera", "side": "side view, profile, facing to the side",
          "back": "back view, seen from behind, facing away from the camera"}
 # no "character sheet" words: they make the model draw a whole design page (many figures, fake text) in each view
-POSE = "full body, standing alone, standing straight, arms relaxed, plain white background, nothing else in the picture"
+POSE = ("full body, standing alone, standing straight, arms relaxed, realistic body proportions, plain white background, "
+        "nothing else in the picture")
+# Turbo was trained on 512×512 squares: asked for a tall view it stretches the body (a long torso); drawn square it
+# crops the figure at the hips, or seats it when told to zoom out (tested). RealVisXL draws at SDXL's native tall
+# size (image.native_size) and gets normal proportions and true side and back views, so real people's sheets use it.
 # The front view steers the side and back views only from 35% of the drawing on (the prompt sets the pose first —
 # from the start it copies the front-facing pose). They don't use the face photo: on the side view it overrode the
 # front view's outfit (another top, shorts), so the side view's face comes from the front view too.
@@ -154,3 +158,4 @@ async def turnaround(comfy: ComfyClient, ch: dict, settings: dict, out: Path, se
         x += v.width
     sheet.save(out)
     return [out, *paths.values()], outfit
+
