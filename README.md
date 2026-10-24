@@ -75,6 +75,9 @@ More picture models (optional), picked the same way:
 curl -L -o models/diffusion_models/z-image-turbo-Q5_K_M.gguf https://huggingface.co/unsloth/Z-Image-Turbo-GGUF/resolve/main/z-image-turbo-Q5_K_M.gguf
 curl -L -o models/text_encoders/Qwen3-4B-Q6_K.gguf https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q6_K.gguf
 curl -L -o models/checkpoints/sdxl_lightning_4step.safetensors https://huggingface.co/ByteDance/SDXL-Lightning/resolve/main/sdxl_lightning_4step.safetensors
+# Pose guide for real-person 3-view sheets (OpenPose SDXL ControlNet, xinsir, Apache-2.0, 2.5 GB)
+mkdir -p engine/ComfyUI/models/controlnet && curl -L -o engine/ComfyUI/models/controlnet/openpose-sdxl-xinsir.safetensors https://huggingface.co/xinsir/controlnet-openpose-sdxl-1.0/resolve/main/diffusion_pytorch_model.safetensors
+# (parallax's BiRefNet cut-out model downloads by itself on first use, ~200 MB, into ~/.u2net)
 # image_model "realvis": RealVisXL V5.0 (photoreal SDXL, OpenRAIL++, 6.9 GB) — the Quality option for real-person characters
 curl -L -o models/checkpoints/RealVisXL_V5.0_fp16.safetensors https://huggingface.co/SG161222/RealVisXL_V5.0/resolve/main/RealVisXL_V5.0_fp16.safetensors
 ```
@@ -153,6 +156,7 @@ Other apps automate Happica through `/api/v1` with an API key (create and revoke
 | `song` on `POST /videos` | A sung song: `{track \| spec, placement: bed \| intro_outro \| sung_story, volume, lyrics_subtitles}`. `spec` makes a new song (title, tags, lyrics, bpm, keyscale, language, duration). Lyrics are timed with Demucs + Whisper and burned in yellow; `lyrics_timing` is saved on the music job |
 | `caption_style`, `output_height`, `upscale` on `POST /videos` | Caption font (`rounded` Jua, `handwritten` Gamja Flower, `system`), size, colour, `bottom`/`lower_third`, box; export e.g. 576×1024 → `output_height: 1920` with `fast` or `ai` upscaling |
 | `art_characters` on `POST /videos`, `kind: "art"` on `POST /characters` | Cartoon characters from 1–3 reference pictures (`refs`) via IP-Adapter; scenes that name one are drawn from its pictures |
+| `motion` / `motion_mode`: `parallax` | The character (cut out with BiRefNet via rembg, MIT) drifts in front of the background; falls back to pan & zoom |
 | `POST /characters/{id}/turnaround` · `/characters/{id}/refs` | 3면도: front, side and back views (an image job: the sheet plus `*_front/_side/_back.png`). Real people default to RealVisXL (~15 min; Turbo stretches standing bodies — a long torso — and fakes side/back views); cartoons use Turbo (~2 min); `refs` with `{job}` makes a cartoon character use those views as its references |
 | `texture` on `POST /images`, `/videos`, `/characters` | 인물 질감: `smooth` (a short extra AI pass, softer skin) or `detailed` (sharpened, fine film grain); omit for the picture as drawn |
 | `POST /stories` | **A whole story video in one call** — the story-file format (`title`, `style`, `characters`, `voice`, `motion`, `scenes: [{image, narration, sfx}]`, `song`, `hashtags`, `caption`). Song, pictures, narration, SFX, video and the 1080×1920 export run as one job; files include `final`, `cover` (cover.png, first scene + title) and `caption` (caption.txt) |
@@ -188,6 +192,8 @@ Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves th
 | Images (Z-Image Turbo Q5, 576×1024) | ~4 min per image (8 steps at ~27 s); 6 scenes: 24.5 min, peak ~11 GB |
 | Images at 512×896 (the 9:16 default since 10-23) | Turbo: 3 pictures in 57 s with the model load; Z-Image: 3 in 593 s (~3.3 min each) |
 | AI motion, 3 s scene (LTX, `ltx_short_side`) | 384 (default: 512×896 drawn at 384×672, then scaled up): ~5 min per scene, held on-model in a two-character test; `null` = full size: 18–25 min at 576×1024, steadier for hard scenes |
+| Exports (`output_height`) | Pan & zoom / parallax / still scenes drawn at the export size from Real-ESRGAN-enlarged pictures (~15 s a picture); a 3-scene 9:16 story at 1080×1920: 175 s. Near-9:16 sizes export at exactly 1080×1920 |
+| Real-person 3-view sheet with the OpenPose pose guide (xinsir SDXL ControlNet, Apache-2.0, 2.5 GB in `engine/ComfyUI/models/controlnet/`) | Turbo ~8 min, RealVisXL ~16 min; normal proportions, true side/back views |
 | Real-person character pictures, 768×768 | Turbo (face from 10%): ~35 s each; RealVisXL "Quality" (25 steps): ~106 s each, straighter and more natural faces. A face touch-up pass (redraw the face crop) was tested and dropped: +2 min a face for almost no change |
 | Images (SDXL-Lightning vs Turbo, 576×1024) | the same: 6 scenes ~110 s including the model load, peak ~10 GB |
 | Story → scenes (qwen2.5:3b) | ~15 s |

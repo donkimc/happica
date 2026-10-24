@@ -142,7 +142,7 @@ class ScriptScene(BaseModel):
     motion: str = Field(default="", max_length=300, description="What moves (used by AI motion)")
     narration: str = Field(default="", max_length=600, description="Spoken exactly as written")
     sfx: list[SfxCue] = Field(default_factory=list, max_length=4, description="Sound effects in this scene")
-    motion_mode: str | None = Field(default=None, pattern="^(kenburns|ltx|none)$",
+    motion_mode: str | None = Field(default=None, pattern="^(kenburns|parallax|ltx|none)$",
                                     description="Overrides the job's motion for this scene; none = a still picture")
     lyric_lines: int | None = Field(default=None, ge=0, le=40,
                                     description="Sung story: how many lyric lines this scene shows (in order); when every "
@@ -190,7 +190,7 @@ class JobRequest(BaseModel):
     width: int = 768
     height: int = 512
     max_scenes: int = Field(default=4, ge=1, le=12)
-    motion: str = Field(default="kenburns", pattern="^(none|kenburns|ltx)$")
+    motion: str = Field(default="kenburns", pattern="^(none|kenburns|parallax|ltx)$")
     clip_seconds: float = Field(default=3, ge=1, le=10)
     fade: float = Field(default=0.5, ge=0, le=2)
     style: str = ""
@@ -546,7 +546,7 @@ async def create_turnaround(character_id: str, req: TurnaroundRequest = Turnarou
     if not ch:
         raise HTTPException(404, "character not found")
     if not req.image_model:  # Turbo stretches standing bodies; RealVisXL is a photo model, so cartoons stay on Turbo
-        req.image_model = "turbo" if ch.get("kind") == "art" else "realvis"
+        req.image_model = "turbo"  # real people get a pose guide (normal proportions); realvis is the Quality option
     settings = {"prompt": f"{ch['name']} 3-view sheet", "character": character_id, "turnaround": True,
                 "width": character.VIEW_SIZE[0], "height": character.VIEW_SIZE[1], "style": "",
                 **req.model_dump()}

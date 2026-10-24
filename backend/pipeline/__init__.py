@@ -226,12 +226,14 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
     if "ltx" in modes:
         await comfy.free()  # SDXL out, LTX in: both don't fit in 16 GB at once
 
+    if output_size(settings) != (settings["width"], settings["height"]):
+        result["clip_size"] = list(output_size(settings))  # clips are made at the final size (see _make_clip)
     for i, shot in enumerate(shots):
         report("video", i / len(shots))
         p = _paths(job_dir, i)
         on_progress = lambda prog, i=i: report("video", (i + prog) / len(shots))
-        await video.animate(comfy, p["image"], _video_prompt(shot), {**settings, "motion": modes[i]}, p["clip"], i,
-                            seconds=result["durations"][i], seed=seed + i, on_progress=on_progress)
+        await _make_clip(comfy, job_dir, settings, result, i, _video_prompt(shot), modes[i], result["durations"][i],
+                         seed + i, on_progress)
         result["clips"].append(_rel(job_dir, p["clip"]))
         report("video", (i + 1) / len(shots), result=result)
 
@@ -322,13 +324,51 @@ async def _reanimate(job_dir: Path, settings: dict, result: dict, report, comfy:
         await comfy.free()
     motion = (result.get("motion") or [""] * len(prompts))[index]
     durations = result.get("durations") or [settings.get("clip_seconds", 3)] * len(prompts)
-    await video.animate(comfy, p["image"], _video_prompt({"prompt": prompts[index], "motion": motion}),
-                        {**settings, "motion": mode},
-                        p["clip"], index, seconds=durations[index], seed=seed,
-                        on_progress=lambda prog: report(f"scene {index + 1} clip", prog))
+    await _make_clip(comfy, job_dir, settings, result, index, _video_prompt({"prompt": prompts[index], "motion": motion}),
+                     mode, durations[index], seed, lambda prog: report(f"scene {index + 1} clip", prog))
     report("assemble", 0.0)
     result.update(await _assemble(job_dir, settings, result, report))
     return result
+
+
+async def _make_clip(comfy: ComfyClient, job_dir: Path, settings: dict, result: dict, i: int, prompt: str, mode: str,
+                     seconds: float, seed: int, on_progress) -> Path:
+    """One scene's clip. Jobs with a larger export size (result["clip_size"]) get their clips at that size:
+    pan & zoom, parallax and still scenes are drawn from the picture enlarged with Real-ESRGAN (sharper than enlarging
+    the finished video, ~2× faster, no flicker — tested); AI-motion clips are enlarged with the job's upscale method.
+    Older jobs (no clip_size) keep scene-size clips, enlarged later as one video."""
+    p = _paths(job_dir, i)
+    scene = (settings["width"], settings["height"])
+    size = tuple(result.get("clip_size") or scene)
+    s = {**settings, "motion": mode}
+    if size != scene and mode in ("kenburns", "none", "parallax"):
+        hd = await _hd_picture(job_dir, p["image"], size)
+        if mode == "kenburns":
+            return await video.ken_burns(hd, s, p["clip"], i, seconds, size=size, prescale=2)
+        if mode == "parallax":
+            return await video.parallax(hd, s, p["clip"], i, seconds, size=size)
+        return await video.still(hd, s, p["clip"], seconds, size=size)
+    await video.animate(comfy, p["image"], prompt, s, p["clip"], i, seconds=seconds, seed=seed, on_progress=on_progress)
+    if size != scene:  # an AI-motion clip at scene size → the export size, with the job's upscale method
+        small = p["clip"].with_name(p["clip"].stem + "_small.mp4")
+        p["clip"].replace(small)
+        method = settings.get("upscale", "fast")
+        if method in ("ai", "anime"):
+            await upscale._ai(small, p["clip"], *size, True, lambda _p: None, lambda: False, anime=method == "anime")
+        else:
+            await ffmpeg.run("-i", str(small), "-vf", f"scale={size[0]}:{size[1]}:flags=lanczos", *ffmpeg.ENCODE, str(p["clip"]))
+        small.unlink()
+    return p["clip"]
+
+
+async def _hd_picture(job_dir: Path, image_path: Path, size: tuple[int, int]) -> Path:
+    """The scene picture enlarged with Real-ESRGAN to twice the export size (made once per picture version)."""
+    out = job_dir / "images_hd" / image_path.name
+    if out.is_file() and out.stat().st_mtime >= image_path.stat().st_mtime:
+        return out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    await upscale._ai(image_path, out, size[0] * 2, size[1] * 2, False, lambda _p: None, lambda: False)
+    return out
 
 
 async def change_sound(job: dict, job_dir: Path, report, music_comfy: ComfyClient, regenerate: set[str]) -> dict:
@@ -416,24 +456,27 @@ def output_size(settings: dict) -> tuple[int, int]:
     if not settings.get("output_height") or settings["output_height"] <= h:
         return w, h
     f = settings["output_height"] / h
-    return int(round(w * f / 2)) * 2, int(round(h * f / 2)) * 2
+    out = int(round(w * f / 2)) * 2, int(round(h * f / 2)) * 2
+    if abs(w / h - 9 / 16) < 0.03:  # near 9:16 (e.g. 512×896): export exactly 9:16 (1080×1920) for TikTok
+        out = int(round(out[1] * 9 / 16 / 2)) * 2, out[1]
+    return out
 
 
 async def _picture(job_dir: Path, settings: dict, clips: list[Path], durations: list[float], fade: float,
-                   report) -> tuple[Path, tuple[int, int]]:
+                   report, prescaled: bool = False) -> tuple[Path, tuple[int, int]]:
     """The joined clips without sound, at the final size. Cached by what it's made of, so changing the sound or a
     sound effect re-mixes without joining (or upscaling, which with AI takes ~1 s a frame) again."""
     import hashlib
 
     size = output_size(settings)
     method = settings.get("upscale", "fast")
-    key = hashlib.sha1(json.dumps([[str(c), c.stat().st_mtime] for c in clips] + [durations, fade, size, method]).encode()).hexdigest()[:16]
+    key = hashlib.sha1(json.dumps([[str(c), c.stat().st_mtime] for c in clips] + [durations, fade, size, method, prescaled]).encode()).hexdigest()[:16]
     out = job_dir / "video_only.mp4"
     stamp = job_dir / "video_only.key"
     if out.is_file() and stamp.is_file() and stamp.read_text() == key:
         return out, size
     joined = await assemble.concat(clips, durations, job_dir / "video_joined.mp4", fade)
-    if size == (settings["width"], settings["height"]):
+    if size == (settings["width"], settings["height"]) or prescaled:  # clips already at the export size
         joined.replace(out)
     elif method in ("ai", "anime"):
         report("upscaling (AI)", 0.0)
@@ -452,7 +495,8 @@ async def _assemble(job_dir: Path, settings: dict, result: dict, report=lambda *
     fade = settings.get("fade", 0.5)
     durations = result.get("durations") or [settings.get("clip_seconds", 3)] * n
     clips = [_paths(job_dir, i)["clip"] for i in range(n)]
-    silent, size = await _picture(job_dir, settings, clips, durations, fade, report)
+    silent, size = await _picture(job_dir, settings, clips, durations, fade, report,
+                                  prescaled=bool(result.get("clip_size")))
     total = _total(settings, result)
 
     narration_track, cues, speech = None, [], []

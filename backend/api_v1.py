@@ -271,7 +271,7 @@ class StoryScene(BaseModel):
     narration: str = Field(default="", max_length=600, description="Spoken exactly as written; empty = no narration")
     sfx: str | list[main.SfxCue] = Field(default_factory=list, description="A sound description, or a list of cues")
     motion: str = Field(default="", max_length=300, description="What moves (AI motion)")
-    motion_mode: str | None = Field(default=None, pattern="^(kenburns|ltx|none)$")
+    motion_mode: str | None = Field(default=None, pattern="^(kenburns|parallax|ltx|none)$")
     lyric_lines: int | None = Field(default=None, ge=0, le=40, description="Sung story: lyric lines this scene shows")
 
 
@@ -295,7 +295,7 @@ class StoryRequest(BaseModel):
     characters: dict[str, str] = Field(default_factory=dict, max_length=12, description="Name → look")
     art_characters: list[str] = Field(default_factory=list, max_length=4, description="Cartoon character ids (reference art)")
     voice: str = Field(default="st-ko-F1", pattern=main.tts.VOICE_ID)
-    motion: str = Field(default="kenburns", pattern="^(kenburns|ltx|none)$")
+    motion: str = Field(default="kenburns", pattern="^(kenburns|parallax|ltx|none)$")
     scenes: list[StoryScene] = Field(min_length=1, max_length=16)
     song: StorySong | None = None
     width: int = Field(default=512, ge=256, le=1024, multiple_of=64,

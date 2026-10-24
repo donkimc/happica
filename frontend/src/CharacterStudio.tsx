@@ -297,8 +297,8 @@ function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; change
                 </select>
               </label>
             )}
-            <button className="secondary" onClick={() => act(async () => upsert(await createTurnaround(job.id, texture || null, s.kind === "art" ? "turbo" : "realvis")))}
-                    title={s.kind === "art" ? "Front, side and back views (about 2 min)" : "Front, side and back views with RealVisXL: natural proportions (about 15 min)"}>
+            <button className="secondary" onClick={() => act(async () => upsert(await createTurnaround(job.id, texture || null, s.kind === "art" ? "turbo" : quality)))}
+                    title={s.kind === "art" ? "Front, side and back views (about 2 min)" : "Front, side and back views with a pose guide: ~8 min (Fast) or ~16 min (Quality)"}>
               3-view sheet (3면도)
             </button>
           </div>

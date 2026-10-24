@@ -37,7 +37,7 @@ export interface ScriptScene {
   motion?: string;
   narration: string;
   sfx: SfxCue[];
-  motion_mode?: "kenburns" | "ltx" | "none" | null;
+  motion_mode?: "kenburns" | "parallax" | "ltx" | "none" | null;
 }
 
 export interface SongBlock {
@@ -157,7 +157,7 @@ export interface JobSettings {
   width: number;
   height: number;
   max_scenes: number;
-  motion: "none" | "kenburns" | "ltx";
+  motion: "none" | "kenburns" | "parallax" | "ltx";
   style: string;
   clip_seconds: number;
   scene_mode: "lines" | "llm" | "slides" | "musicvideo" | "script";

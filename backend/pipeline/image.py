@@ -86,7 +86,8 @@ def _art_nodes(wf: dict, key: str, refs: list[str], weight: float, start: float 
 
 def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], settings: dict,
                     face: str | None = None, with_face: list[bool] | None = None,
-                    art: list[str | None] | None = None, art_refs: dict[str, list[str]] | None = None) -> dict:
+                    art: list[str | None] | None = None, art_refs: dict[str, list[str]] | None = None,
+                    poses: list[str | None] | None = None) -> dict:
     """One branch per prompt. Branches flagged in `with_face` are conditioned on the uploaded face with PhotoMaker
     (build their prompts with character.prompt_for(): it adds the "photomaker" trigger word ComfyUI needs)."""
     model = settings.get("image_model", "turbo")
@@ -164,6 +165,17 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
                 branch[f"sampler_{i}"]["inputs"].update(model=[f"apply_{art[i]}", 0], sigmas=["sigmas_art", 0])
         branch[f"sampler_{i}"]["inputs"]["noise_seed"] = seed
         branch[f"save_{i}"]["inputs"]["filename_prefix"] = f"happica/{name}"
+        if poses and poses[i]:  # hold this picture to a stick figure (pose.py): normal proportions, a true view
+            from . import pose
+
+            if "pose_net" not in wf:
+                wf["pose_net"] = {"class_type": "ControlNetLoader", "inputs": {"control_net_name": pose.MODEL}}
+            wf[f"pose_img_{i}"] = {"class_type": "LoadImage", "inputs": {"image": poses[i]}}
+            wf[f"pose_apply_{i}"] = {"class_type": "ControlNetApplyAdvanced", "inputs": {
+                "positive": branch[f"sampler_{i}"]["inputs"]["positive"], "negative": branch[f"sampler_{i}"]["inputs"]["negative"],
+                "control_net": ["pose_net", 0], "image": [f"pose_img_{i}", 0], "strength": pose.STRENGTH,
+                "start_percent": 0.0, "end_percent": pose.END, "vae": ["ckpt", 2]}}
+            branch[f"sampler_{i}"]["inputs"].update(positive=[f"pose_apply_{i}", 0], negative=[f"pose_apply_{i}", 1])
         if smooth:
             _smooth_pass(wf, branch, i, text, seed, face and with_face[i])
         if model == "realvis" and native_size(settings["width"], settings["height"]) != (settings["width"], settings["height"]):
@@ -235,6 +247,7 @@ async def generate_batch(
     character: dict | None = None,
     with_face: list[bool] | None = None,
     art: list[dict | None] | None = None,
+    poses: list[Path | None] | None = None,
 ) -> list[Path]:
     """Generate one image per prompt in a single ComfyUI run; progress runs 0 → 1 across all of them.
 
@@ -252,7 +265,10 @@ async def generate_batch(
         for a in {a["id"]: a for a in art if a}.values():
             art_refs[a["id"]] = [await comfy.upload_image(_square(OUTPUTS_DIR / r), f"art_{a['id']}_{k}.png")
                                  for k, r in enumerate(a["refs"])]
-    wf = _batch_workflow(prompts, seeds, names, settings, face, with_face, art_keys, art_refs)
+    pose_names = None
+    if poses and any(poses):
+        pose_names = [await comfy.upload_image(p, f"pose_{p.parent.name}_{p.name}") if p else None for p in poses]
+    wf = _batch_workflow(prompts, seeds, names, settings, face, with_face, art_keys, art_refs, pose_names)
 
     done: dict[int, float] = {}
 

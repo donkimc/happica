@@ -104,7 +104,8 @@ POSE = ("full body, standing alone, standing straight, arms relaxed, realistic b
         "nothing else in the picture")
 # Turbo was trained on 512×512 squares: asked for a tall view it stretches the body (a long torso); drawn square it
 # crops the figure at the hips, or seats it when told to zoom out (tested). RealVisXL draws at SDXL's native tall
-# size (image.native_size) and gets normal proportions and true side and back views, so real people's sheets use it.
+# size (image.native_size) and gets normal proportions and true side and back views. A pose guide (pose.py) does the
+# same for Turbo at ~8 min a sheet instead of ~16.
 # The front view steers the side and back views only from 35% of the drawing on (the prompt sets the pose first —
 # from the start it copies the front-facing pose). They don't use the face photo: on the side view it overrode the
 # front view's outfit (another top, shorts), so the side view's face comes from the front view too.
@@ -130,7 +131,12 @@ async def turnaround(comfy: ComfyClient, ch: dict, settings: dict, out: Path, se
     paths = {v: out.with_name(f"{out.stem}_{v}.png") for v in VIEWS}
     art = ch.get("kind") == "art"
     report("drawing the front view", 0.0)
-    await image.generate_batch(comfy, [_view_prompt(ch, "front")], s, [paths["front"]], [seed],
+    from . import pose
+
+    # Real people: stick figures with human proportions hold every view to a normal body and a true side/back view.
+    # Not for cartoons: a human skeleton forced human proportions onto a chibi character and its outfit drifted.
+    guides = {v: None if art else pose.draw(v, VIEW_SIZE, out.with_name(f"{out.stem}_{v}_pose.png")) for v in VIEWS}
+    await image.generate_batch(comfy, [_view_prompt(ch, "front")], s, [paths["front"]], [seed], poses=[guides["front"]],
                                on_progress=lambda p: report("drawing the front view", p * 0.4),
                                **({"art": [ch]} if art else {"character": ch}))
     front_ref = {"id": f"{out.parent.name}_{out.stem}_front", "name": ch["name"],
@@ -146,7 +152,7 @@ async def turnaround(comfy: ComfyClient, ch: dict, settings: dict, out: Path, se
         outfit = ""
     side_back = ["side", "back"]
     await image.generate_batch(comfy, [_view_prompt(ch, v, outfit) for v in side_back], {**s, "art_weight": VIEW_WEIGHT, "art_start": VIEW_START},
-                               [paths[v] for v in side_back], [seed + 1, seed + 2],
+                               [paths[v] for v in side_back], [seed + 1, seed + 2], poses=[guides[v] for v in side_back],
                                on_progress=lambda p: report("drawing the side and back views", 0.4 + p * 0.6),
                                art=[front_ref, front_ref],
                                **({} if art else {"character": ch, "with_face": [False, False]}))

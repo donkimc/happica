@@ -294,6 +294,7 @@ export default function GenerateForm({ prompt, settings, health, library, sfxLib
           <select value={settings.motion} onChange={(e) => set({ motion: e.target.value as JobSettings["motion"] })}>
             <option value="none">Images only</option>
             <option value="kenburns">Pan &amp; zoom (fast)</option>
+            <option value="parallax">Parallax — the character moves in front of the background (fast)</option>
             <option value="ltx">AI motion — LTX-Video (slow)</option>
           </select>
         </label>

@@ -1,6 +1,7 @@
 """Image → video clip.
 
 kenburns: slow zoom/pan over the still with ffmpeg (under a second per clip).
+parallax: the character cut out (BiRefNet) and moved a little faster than the background behind it.
 none:     the still held as is (one scene of a script that mixes motions).
 ltx: AI motion with LTX-Video 2B (distilled) through ComfyUI (minutes per clip on an M2).
 """
@@ -48,27 +49,33 @@ async def animate(comfy: ComfyClient, image: Path, prompt: str, settings: dict, 
         return await ltx(comfy, image, prompt, settings, out_path, seconds, seed, on_progress)
     if motion == "none":
         return await still(image, settings, out_path, seconds)
+    if motion == "parallax":
+        return await parallax(image, settings, out_path, index, seconds)
     raise ValueError(f"Unknown motion '{motion}'")
 
 
-async def still(image: Path, settings: dict, out_path: Path, seconds: float) -> Path:
+async def still(image: Path, settings: dict, out_path: Path, seconds: float, size: tuple[int, int] | None = None) -> Path:
     """The picture held without camera movement (a script scene with motion_mode "none")."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    vf = f"scale={settings['width']}:{settings['height']}:flags=lanczos,fps={FPS},format=yuv420p"
+    w, h = size or (settings["width"], settings["height"])
+    vf = f"scale={w}:{h}:flags=lanczos,fps={FPS},format=yuv420p"
     await ffmpeg.run("-loop", "1", "-i", str(image), "-vf", vf, "-t", f"{seconds:.3f}", "-r", str(FPS), *ffmpeg.ENCODE,
                      str(out_path))
     return out_path
 
 
-async def ken_burns(image: Path, settings: dict, out_path: Path, index: int, seconds: float) -> Path:
-    w, h = settings["width"], settings["height"]
+async def ken_burns(image: Path, settings: dict, out_path: Path, index: int, seconds: float,
+                    size: tuple[int, int] | None = None, prescale: int = 4) -> Path:
+    """`size`: render at this size (default the scene size); `prescale`: how much bigger the picture is made before
+    zoompan (4 hides its integer-pixel jitter; an already enlarged picture needs only 2)."""
+    w, h = size or (settings["width"], settings["height"])
     frames = round(seconds * FPS)
     t = f"(on/{frames - 1})"  # zoompan's output frame number → 0..1
     eased = f"({t}*{t}*(3-2*{t}))"  # smoothstep: no mechanical start and stop
     z, x, y = MOVES[index % len(MOVES)](eased)
 
     # Upscaling 4x before zoompan hides its integer-pixel jitter; it then renders at the target size.
-    vf = (f"scale={w * 4}:{h * 4}:flags=lanczos,"
+    vf = (f"scale={w * prescale}:{h * prescale}:flags=lanczos,"
           f"zoompan=z='{z}':x='{x}':y='{y}':d={frames}:s={w}x{h}:fps={FPS},"
           f"format=yuv420p")
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,3 +148,86 @@ async def ltx(comfy: ComfyClient, image: Path, prompt: str, settings: dict, out_
     await ffmpeg.run("-i", str(raw), "-vf", vf, "-t", f"{seconds:.3f}", "-an", *ffmpeg.ENCODE, str(out_path))
     raw.unlink()
     return out_path
+
+
+# ---------- parallax: the character moves in front of the background (layered depth, no AI redrawing) ----------
+PARALLAX_MODEL = "birefnet-general-lite"  # BiRefNet (MIT) via rembg: cuts the character(s) out of the picture
+_rembg_session = None
+
+
+def _cut_out(img):
+    """(foreground RGBA, background RGB with the hole filled in), or None when no clear subject is found."""
+    import cv2
+    import numpy as np
+    from PIL import Image
+    from rembg import new_session, remove
+
+    global _rembg_session
+    if _rembg_session is None:
+        _rembg_session = new_session(PARALLAX_MODEL)
+    small = img.copy()
+    small.thumbnail((1024, 1024))
+    mask = remove(small, session=_rembg_session, only_mask=True).resize(img.size, Image.Resampling.BILINEAR)
+    m = np.asarray(mask)
+    share = (m > 128).mean()
+    if not 0.02 <= share <= 0.7:  # nothing found, or "everything is foreground": not worth layering
+        return None
+    fg = img.convert("RGBA")
+    fg.putalpha(mask)
+    # Fill the hole behind the character from its surroundings (at half size: OpenCV's inpaint is slow on big frames)
+    half = (img.width // 2, img.height // 2)
+    hole = cv2.dilate((np.asarray(mask.resize(half)) > 40).astype(np.uint8) * 255, np.ones((25, 25), np.uint8))
+    filled = cv2.inpaint(np.asarray(img.convert("RGB").resize(half)), hole, 9, cv2.INPAINT_TELEA)
+    bg = np.asarray(img.convert("RGB")).copy()
+    big_hole = np.asarray(Image.fromarray(hole).resize(img.size)) > 0
+    bg[big_hole] = np.asarray(Image.fromarray(filled).resize(img.size, Image.Resampling.BICUBIC))[big_hole]
+    return fg, Image.fromarray(bg)
+
+
+def _parallax_frames(image: Path, out_path: Path, index: int, seconds: float, size: tuple[int, int]) -> bool:
+    import subprocess
+
+    from PIL import Image
+
+    img = Image.open(image).convert("RGB")
+    layers = _cut_out(img)
+    if not layers:
+        return False
+    fg, bg = layers
+    w, h = size
+    frames = round(seconds * FPS)
+    direction = 1 if index % 2 == 0 else -1  # alternate drift direction between scenes
+    proc = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}",
+                             "-r", str(FPS), "-i", "-", *ffmpeg.ENCODE, str(out_path)], stdin=subprocess.PIPE)
+
+    def view(layer, zoom, shift_x):
+        """Crop the layer (sized like the picture) for a zoom and a horizontal shift, scaled to the frame."""
+        cw, ch = img.width / zoom, img.height / zoom
+        x0 = (img.width - cw) / 2 + shift_x * img.width
+        y0 = (img.height - ch) / 2
+        return layer.resize((w, h), Image.Resampling.BILINEAR, box=(x0, y0, x0 + cw, y0 + ch))
+
+    for k in range(frames):
+        t = k / max(1, frames - 1)
+        e = t * t * (3 - 2 * t)  # smoothstep
+        back = view(bg, 1.04 + 0.03 * e, direction * 0.01 * e)  # background: slow
+        front = view(fg, 1.04 + 0.08 * e, -direction * 0.015 * e)  # character: closer, so it moves more
+        back.paste(front, (0, 0), front)
+        proc.stdin.write(back.tobytes())
+    proc.stdin.close()
+    if proc.wait():
+        raise RuntimeError("ffmpeg failed while making a parallax clip")
+    return True
+
+
+async def parallax(image: Path, settings: dict, out_path: Path, index: int, seconds: float,
+                   size: tuple[int, int] | None = None) -> Path:
+    """Layered motion: the cut-out character drifts and grows a little faster than the background behind it.
+    Falls back to pan & zoom when no clear subject can be cut out."""
+    import asyncio
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    size = size or (settings["width"], settings["height"])
+    if await asyncio.to_thread(_parallax_frames, image, out_path, index, seconds, size):
+        return out_path
+    return await ken_burns(image, settings, out_path, index, seconds, size=size, prescale=2)

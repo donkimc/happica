@@ -153,6 +153,7 @@ export default function ScriptEditor({ title, settings, onTitle, onSettings, lib
               <select value={scene.motion_mode ?? ""} onChange={(e) => update(i, { motion_mode: (e.target.value || null) as ScriptScene["motion_mode"] })}>
                 <option value="">Same as the video</option>
                 <option value="kenburns">Pan &amp; zoom</option>
+                <option value="parallax">Parallax</option>
                 <option value="ltx">AI motion (slow)</option>
                 <option value="none">Still picture</option>
               </select>
