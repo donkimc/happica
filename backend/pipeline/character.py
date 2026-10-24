@@ -83,7 +83,8 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
     seed = random.randrange(2**32)
     paths = [job_dir / f"sheet_{i + 1}.png" for i in range(len(prompts))]
     # 768 px: at 512 the eyes are only ~25 px across and SDXL-Turbo often draws them mismatched (two colours/shapes)
-    settings = {"width": 768, "height": 768, "texture": ch.get("texture"), "style": "photorealistic, 35mm photo, detailed skin"}
+    settings = {"width": 768, "height": 768, "texture": ch.get("texture"), "image_model": ch.get("image_model") or "turbo",
+                "style": "photorealistic, 35mm photo, detailed skin"}
     await image.generate_batch(comfy, prompts, settings, paths, [seed + i for i in range(len(prompts))],
                                on_progress=lambda p: report("drawing the character sheet", p), character=ch)
     return {"images": [str(p.relative_to(OUTPUTS_DIR)) for p in paths], "seed": seed}

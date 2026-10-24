@@ -219,8 +219,8 @@ class JobRequest(BaseModel):
     voice: str = Field(default="af_heart", pattern=tts.VOICE_ID)
     subtitles: str = Field(default="burn", pattern="^(off|soft|burn)$")
     image_steps: int = Field(default=4, ge=1, le=8)
-    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|flux|zimage)$",
-                             description="turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
+    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|realvis|flux|zimage)$",
+                             description="realvis = RealVisXL (Quality: best real-person faces, ~2 min a picture, works with characters); turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
     texture: str | None = Field(default=None, pattern="^(smooth|detailed)$",
                                 description="인물 질감: smooth = a short extra AI pass for softer skin (Turbo/Lightning; FLUX and "
                                             "Z-Image get smoothing words only); detailed = sharpened with a fine film grain. "
@@ -479,8 +479,8 @@ class ImageRequest(BaseModel):
     count: int = Field(default=4, ge=1, le=4)
     character: str = ""  # a character id: their face via PhotoMaker
     image_steps: int = Field(default=4, ge=1, le=8)
-    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|flux|zimage)$",
-                             description="turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
+    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|realvis|flux|zimage)$",
+                             description="realvis = RealVisXL (Quality: best real-person faces, ~2 min a picture, works with characters); turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
     texture: str | None = Field(default=None, pattern="^(smooth|detailed)$",
                                 description="인물 질감: smooth = a short extra AI pass for softer skin (Turbo/Lightning; FLUX and "
                                             "Z-Image get smoothing words only); detailed = sharpened with a fine film grain. "
@@ -508,6 +508,8 @@ class CharacterRequest(BaseModel):
                                 description="인물 질감: smooth = a short extra AI pass for softer skin (Turbo/Lightning; FLUX and "
                                             "Z-Image get smoothing words only); detailed = sharpened with a fine film grain. "
                                             "Omit to keep the picture as drawn")
+    image_model: str = Field(default="turbo", pattern="^(turbo|realvis)$",
+                             description="Character sheet quality: turbo (fast) or realvis (Quality, ~7 min for the sheet)")
     consent: bool = Field(default=False, description="Real people only: the photo is of you or someone who agreed")
 
 
@@ -532,7 +534,7 @@ async def create_character(req: CharacterRequest):
 
 class TurnaroundRequest(BaseModel):
     count: int = Field(default=1, ge=1, le=2, description="How many sheets (variations) to draw")
-    image_model: str = Field(default="turbo", pattern="^(turbo|lightning)$", description="Characters need an SDXL model")
+    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|realvis)$", description="Characters need an SDXL model")
     texture: str | None = Field(default=None, pattern="^(smooth|detailed)$")
     seed: int | None = None
 

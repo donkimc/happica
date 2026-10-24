@@ -150,7 +150,7 @@ export interface Voice {
 
 // turbo = SDXL-Turbo, lightning = SDXL-Lightning (both ~5 s a picture, work with characters);
 // flux = FLUX.1-schnell, zimage = Z-Image Turbo (minutes a picture, follow descriptions closely; no characters)
-export type ImageModel = "turbo" | "lightning" | "flux" | "zimage";
+export type ImageModel = "turbo" | "lightning" | "realvis" | "flux" | "zimage";
 export const SLOW_MODELS: ImageModel[] = ["flux", "zimage"];
 
 export interface JobSettings {
@@ -241,11 +241,11 @@ export async function uploadImage(file: File): Promise<{ path: string; width: nu
   return fetch("/api/uploads", { method: "POST", body: form }).then((r) => json(r));
 }
 export const createImages = (settings: ImageSettings) => post("/api/images", settings).then((r) => json<Job>(r));
-export const createCharacter = (c: { name: string; photo: string; kind: string; look: string; consent: boolean; refs?: string[]; style?: string; texture?: Texture | null }) =>
+export const createCharacter = (c: { name: string; photo: string; kind: string; look: string; consent: boolean; refs?: string[]; style?: string; texture?: Texture | null; image_model?: ImageModel }) =>
   post("/api/characters", c).then((r) => json<Job>(r));
 /** 3면도: a front / side / back sheet of a character (an image job) */
-export const createTurnaround = (id: string, texture?: Texture | null) =>
-  post(`/api/characters/${id}/turnaround`, { count: 1, texture: texture || null }).then((r) => json<Job>(r));
+export const createTurnaround = (id: string, texture?: Texture | null, image_model: ImageModel = "turbo") =>
+  post(`/api/characters/${id}/turnaround`, { count: 1, texture: texture || null, image_model }).then((r) => json<Job>(r));
 /** Cartoon characters: use a 3-view sheet's pictures as the reference pictures */
 export const useViewsAsRefs = (id: string, job: string) => post(`/api/characters/${id}/refs`, { job }).then((r) => json<Job>(r));
 export const createVoiceover = (settings: VoiceSettings) => post("/api/voiceover", settings).then((r) => json<Job>(r));

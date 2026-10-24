@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cancelJob, createCharacter, createImages, createTurnaround, deleteJob, isActive, Job, outputUrl, Texture, uploadImage, useViewsAsRefs } from "./api";
+import { cancelJob, createCharacter, createImages, createTurnaround, deleteJob, ImageModel, isActive, Job, outputUrl, Texture, uploadImage, useViewsAsRefs } from "./api";
 import { IMAGE_DEFAULTS } from "./ImageStudio";
 
 export interface CharacterSettings {
@@ -213,6 +213,7 @@ function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; change
   const s = job.settings as unknown as CharacterSettings;
   const [change, setChange] = useState("");
   const [texture, setTexture] = useState<Texture | "">("");
+  const [quality, setQuality] = useState<ImageModel>("turbo"); // real people: "realvis" draws better faces, ~3× slower
   const active = isActive(job);
   const sheet = (job.result?.images ?? []) as string[];
   const ready = job.state === "done";
@@ -270,7 +271,7 @@ function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; change
                   // real faces at 768 px: at 512 the eyes are tiny and often come out mismatched
                   const size = s.kind === "art" ? 512 : 768;
                   upsert(await createImages({ ...IMAGE_DEFAULTS, prompt, width: size, height: size, count: 2, style, character: job.id,
-                                              texture: texture || null }));
+                                              texture: texture || null, image_model: s.kind === "art" ? "turbo" : quality }));
                   setChange("");
                 })
               }
@@ -287,7 +288,16 @@ function CharacterCard({ job, changes, upsert, remove, act }: { job: Job; change
                 <option value="detailed">Detailed (sharp, fine grain)</option>
               </select>
             </label>
-            <button className="secondary" onClick={() => act(async () => upsert(await createTurnaround(job.id, texture || null)))}
+            {s.kind !== "art" && (
+              <label>
+                Quality
+                <select value={quality} onChange={(e) => setQuality(e.target.value as ImageModel)}>
+                  <option value="turbo">Fast (~35 s a picture)</option>
+                  <option value="realvis">Quality — RealVisXL, better faces (~2 min a picture)</option>
+                </select>
+              </label>
+            )}
+            <button className="secondary" onClick={() => act(async () => upsert(await createTurnaround(job.id, texture || null, s.kind === "art" ? "turbo" : quality)))}
                     title="Front, side and back views (about 2 min)">
               3-view sheet (3면도)
             </button>

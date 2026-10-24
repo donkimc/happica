@@ -315,8 +315,8 @@ class StoryRequest(BaseModel):
     ltx_end_frame: bool = Field(default=True, description="AI motion: each clip ends on its clean picture")
     ltx_short_side: int | None = Field(default=384, ge=256, le=1024,
                                        description="AI motion draw size (short side); null = the full scene size")
-    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|flux|zimage)$",
-                             description="turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
+    image_model: str = Field(default="turbo", pattern="^(turbo|lightning|realvis|flux|zimage)$",
+                             description="realvis = RealVisXL (Quality: best real-person faces, ~2 min a picture, works with characters); turbo = SDXL-Turbo; lightning = SDXL-Lightning (same speed, ~15 s a picture at 576x1024, cleaner; both work with characters); zimage = Z-Image Turbo (~4 min a picture, follows character descriptions closely); flux = FLUX.1-schnell (~4-5 min a picture). zimage and flux can't use characters")
     seed: int | None = None
     webhook_url: str | None = WEBHOOK
 

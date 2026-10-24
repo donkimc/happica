@@ -23,13 +23,20 @@ from config import OUTPUTS_DIR, WORKFLOWS_DIR
 WORKFLOW = json.loads((WORKFLOWS_DIR / "sdxl_turbo_t2i.json").read_text())
 FLUX_WORKFLOW = json.loads((WORKFLOWS_DIR / "flux_schnell_t2i.json").read_text())
 ZIMAGE_WORKFLOW = json.loads((WORKFLOWS_DIR / "zimage_turbo_t2i.json").read_text())
-MODELS = ("turbo", "lightning", "flux", "zimage")
+MODELS = ("turbo", "lightning", "realvis", "flux", "zimage")
 # SDXL-Lightning (ByteDance, 4-step): the same SDXL graph as Turbo, so faces (PhotoMaker) and art characters
 # (IP-Adapter) still work. Distilled at 1024 px (Turbo at 512 px): in a 12-scene test at 576×1024 it drew cleaner
 # pictures with fewer stray extra figures at the same speed, but art characters stayed less on-model than with
 # Turbo. It wants plain euler on an sgm_uniform schedule.
 LIGHTNING = {"ckpt_name": "sdxl_lightning_4step.safetensors", "sampler": "euler", "scheduler": "sgm_uniform"}
-SDXL_MODELS = ("turbo", "lightning")
+# RealVisXL V5.0 (photoreal SDXL, OpenRAIL++): the "Quality" model for real-person characters. A full (not distilled)
+# model: 25 steps with guidance and a negative prompt. Tested on a character: clearly straighter, more natural faces
+# that look more like the photo than Turbo, ~106 s a picture at 768×768 instead of ~35 s. Works with PhotoMaker.
+REALVIS = {"ckpt_name": "RealVisXL_V5.0_fp16.safetensors", "sampler": "dpmpp_2m", "scheduler": "karras", "steps": 25,
+           "cfg": 5.0, "face_start": 0.2,
+           "negative": "deformed, asymmetric face, crooked eyes, cross-eyed, distorted face, bad anatomy, blurry, lowres, "
+                       "extra fingers, text, watermark"}
+SDXL_MODELS = ("turbo", "lightning", "realvis")
 IPADAPTER = json.loads((WORKFLOWS_DIR / "ipadapter_t2i.json").read_text())
 ART_WEIGHT = 0.7  # IP-Adapter strength: higher copies the reference pose too, lower drifts off-model
 ART_STEPS = 6  # like PhotoMaker, the extra conditioning needs a couple more turbo steps
@@ -46,9 +53,10 @@ PER_SCENE = ("positive", "sampler", "decode", "save")  # duplicated per scene; t
 
 
 CHARACTER_STEPS = 6  # PhotoMaker needs a couple more turbo steps to settle the face
-# The first 40% of sampling follows only the prompt (composition, era, clothes, setting); the face comes after.
-# Applied from the start, PhotoMaker copies the photo's background and outfit too and ignores "1920s portrait".
-FACE_START = 0.4
+# The first part of sampling follows only the prompt (composition, era, clothes, setting); the face comes after.
+# Applied from the very start, PhotoMaker copies the photo's background and outfit and ignores "1920s portrait";
+# from 40% the face came out crooked more often. 10% (tested on a character) gives straight faces closer to the photo.
+FACE_START = 0.1
 
 
 def _art_nodes(wf: dict, key: str, refs: list[str], weight: float, start: float = ART_START) -> None:
@@ -90,25 +98,34 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
         base["sampler_select"]["inputs"]["sampler_name"] = LIGHTNING["sampler"]
         base["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
             "model": ["ckpt", 0], "scheduler": LIGHTNING["scheduler"], "steps": 4, "denoise": 1.0}}
+    elif model == "realvis":
+        base["ckpt"]["inputs"]["ckpt_name"] = REALVIS["ckpt_name"]
+        base["negative"]["inputs"]["text"] = REALVIS["negative"]
+        base["sampler_select"]["inputs"]["sampler_name"] = REALVIS["sampler"]
+        base["sampler"]["inputs"]["cfg"] = REALVIS["cfg"]
+        base["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
+            "model": ["ckpt", 0], "scheduler": REALVIS["scheduler"], "steps": REALVIS["steps"], "denoise": 1.0}}
     wf = {nid: node for nid, node in base.items() if nid not in PER_SCENE}
     with_face = with_face or [False] * len(prompts)
     if face and any(with_face):
         wf["photomaker"] = {"class_type": "PhotoMakerLoader", "inputs": {"photomaker_model_name": "photomaker-v1.bin"}}
         wf["face"] = {"class_type": "LoadImage", "inputs": {"image": face}}
         wf["sigmas_face"] = copy.deepcopy(base["sigmas"])
-        wf["sigmas_face"]["inputs"]["steps"] = CHARACTER_STEPS
+        if model != "realvis":  # the full model already takes 25 steps
+            wf["sigmas_face"]["inputs"]["steps"] = CHARACTER_STEPS
     art = art or [None] * len(prompts)
     for key, refs in (art_refs or {}).items():
         if key in art:
             _art_nodes(wf, key, refs, float(settings.get("art_weight", ART_WEIGHT)), float(settings.get("art_start", ART_START)))
     if any(art):
         wf["sigmas_art"] = copy.deepcopy(base["sigmas"])
-        wf["sigmas_art"]["inputs"]["steps"] = ART_STEPS
+        if model != "realvis":
+            wf["sigmas_art"]["inputs"]["steps"] = ART_STEPS
 
     smooth = settings.get("texture") == "smooth"
     if smooth:
         wf["sigmas_tex"] = copy.deepcopy(base["sigmas"])
-        wf["sigmas_tex"]["inputs"].update(steps=4, denoise=SMOOTH[1])
+        wf["sigmas_tex"]["inputs"].update(steps=8 if model == "realvis" else 4, denoise=SMOOTH[1])
 
     style = settings.get("style", "").strip()
     for i, (prompt, seed, name) in enumerate(zip(prompts, seeds, names)):
@@ -119,7 +136,7 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
                     node["inputs"][key] = [f"{value[0]}_{i}", value[1]]
         text = f"{prompt}, {style}" if style else prompt
         if face and with_face[i]:
-            start = float(settings.get("face_start", FACE_START))
+            start = float(settings.get("face_start", REALVIS["face_start"] if model == "realvis" else FACE_START))
             wf[f"face_cond_{i}"] = {"class_type": "PhotoMakerEncode", "inputs": {
                 "photomaker": ["photomaker", 0], "image": ["face", 0], "clip": ["ckpt", 1], "text": text}}
             wf[f"plain_cond_{i}"] = {"class_type": "CLIPTextEncode", "inputs": {
@@ -155,7 +172,7 @@ def _smooth_pass(wf: dict, branch: dict, i: int, text: str, seed: int, face: boo
         wf[f"tex_cond_{i}"] = {"class_type": "CLIPTextEncode", "inputs": {"clip": ["ckpt", 1], "text": tex_text}}
     first = branch[f"sampler_{i}"]["inputs"]
     wf[f"tex_sampler_{i}"] = {"class_type": "SamplerCustom", "inputs": {
-        "model": first["model"], "add_noise": True, "noise_seed": seed + 1, "cfg": 1.0,
+        "model": first["model"], "add_noise": True, "noise_seed": seed + 1, "cfg": first.get("cfg", 1.0),
         "positive": [f"tex_cond_{i}", 0], "negative": first["negative"], "sampler": first["sampler"],
         "sigmas": ["sigmas_tex", 0], "latent_image": [f"sampler_{i}", 0]}}
     branch[f"decode_{i}"]["inputs"]["samples"] = [f"tex_sampler_{i}", 0]

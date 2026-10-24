@@ -75,6 +75,8 @@ More picture models (optional), picked the same way:
 curl -L -o models/diffusion_models/z-image-turbo-Q5_K_M.gguf https://huggingface.co/unsloth/Z-Image-Turbo-GGUF/resolve/main/z-image-turbo-Q5_K_M.gguf
 curl -L -o models/text_encoders/Qwen3-4B-Q6_K.gguf https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q6_K.gguf
 curl -L -o models/checkpoints/sdxl_lightning_4step.safetensors https://huggingface.co/ByteDance/SDXL-Lightning/resolve/main/sdxl_lightning_4step.safetensors
+# image_model "realvis": RealVisXL V5.0 (photoreal SDXL, OpenRAIL++, 6.9 GB) — the Quality option for real-person characters
+curl -L -o models/checkpoints/RealVisXL_V5.0_fp16.safetensors https://huggingface.co/SG161222/RealVisXL_V5.0/resolve/main/RealVisXL_V5.0_fp16.safetensors
 ```
 
 Characters (PhotoMaker v1, 0.93 GB):
@@ -186,6 +188,7 @@ Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves th
 | Images (Z-Image Turbo Q5, 576×1024) | ~4 min per image (8 steps at ~27 s); 6 scenes: 24.5 min, peak ~11 GB |
 | Images at 512×896 (the 9:16 default since 10-23) | Turbo: 3 pictures in 57 s with the model load; Z-Image: 3 in 593 s (~3.3 min each) |
 | AI motion, 3 s scene (LTX, `ltx_short_side`) | 384 (default: 512×896 drawn at 384×672, then scaled up): ~5 min per scene, held on-model in a two-character test; `null` = full size: 18–25 min at 576×1024, steadier for hard scenes |
+| Real-person character pictures, 768×768 | Turbo (face from 10%): ~35 s each; RealVisXL "Quality" (25 steps): ~106 s each, straighter and more natural faces. A face touch-up pass (redraw the face crop) was tested and dropped: +2 min a face for almost no change |
 | Images (SDXL-Lightning vs Turbo, 576×1024) | the same: 6 scenes ~110 s including the model load, peak ~10 GB |
 | Story → scenes (qwen2.5:3b) | ~15 s |
 | Narration (Kokoro) | ~5–10 s per scene |
