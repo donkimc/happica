@@ -35,6 +35,30 @@ runner = JobRunner(store, {
 })
 
 
+def _rss_mb() -> float:
+    """This server process's resident memory (what the Mac really has to hold), in MB."""
+    import os
+    import subprocess
+
+    out = subprocess.run(["ps", "-o", "rss=", "-p", str(os.getpid())], capture_output=True, text=True).stdout.strip()
+    return int(out or 0) / 1024
+
+
+def _job_started(job: dict) -> None:
+    job["_rss_before"] = _rss_mb()
+
+
+def _job_done(job: dict) -> None:
+    """Release the in-process models after every job and log the server's memory, so growth shows up in the log."""
+    after = _rss_mb()
+    pipeline.release_models()
+    print(f"memory: job {job['id']} ({job['kind']}) {job.get('_rss_before', 0):.0f} MB before, {after:.0f} MB after, "
+          f"{_rss_mb():.0f} MB after releasing models", flush=True)
+
+
+runner.before_task, runner.after_task = _job_started, _job_done
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     if recovered := runner.recover():  # jobs a restart interrupted start again

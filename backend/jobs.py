@@ -90,6 +90,8 @@ class JobRunner:
         self.queue: asyncio.Queue[tuple[str, Task]] = asyncio.Queue()
         self.subscribers: dict[str, set[asyncio.Queue]] = {}
         self.on_finished: Callable[[dict], None] | None = None  # called with the job once it's done/failed/cancelled
+        self.before_task: Callable[[dict], None] | None = None
+        self.after_task: Callable[[dict], None] | None = None  # called after every task (cleanup, memory log)
 
     def recover(self) -> list[str]:
         """After a restart: queue again the jobs that were waiting or running when the backend stopped (oldest
@@ -162,6 +164,8 @@ class JobRunner:
                 self._update(_id, stage=stage, progress=round(progress, 3), **extra)
 
             self._update(job_id, state="running")
+            if self.before_task:
+                self.before_task(job)
             try:
                 result = await task(job, job_dir, report)
                 final = dict(state="done", progress=1.0, result=result)
@@ -170,3 +174,5 @@ class JobRunner:
             current = self.store.get(job_id)
             if current and current["state"] != "cancelled":
                 self._finished(self._update(job_id, **final))
+            if self.after_task:
+                self.after_task(job)

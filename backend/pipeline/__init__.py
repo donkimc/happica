@@ -450,6 +450,16 @@ def level(settings: dict, key: str, default: float, narrated: bool) -> float:
     return value if narrated else min(1.0, value * 2.5)
 
 
+def release_models() -> None:
+    """After every job: drop the models the backend itself loads (both narration voices), like ComfyUI's
+    --cache-none, so the server doesn't sit on gigabytes between jobs while ComfyUI needs the memory."""
+    import gc
+
+    tts._kokoro.cache_clear()
+    tts._supertonic.cache_clear()
+    gc.collect()
+
+
 def output_size(settings: dict) -> tuple[int, int]:
     """The final video's size: the generation size, or scaled up to output_height (e.g. 576×1024 → 1080×1920)."""
     w, h = settings["width"], settings["height"]

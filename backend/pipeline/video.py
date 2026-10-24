@@ -151,37 +151,29 @@ async def ltx(comfy: ComfyClient, image: Path, prompt: str, settings: dict, out_
 
 
 # ---------- parallax: the character moves in front of the background (layered depth, no AI redrawing) ----------
-PARALLAX_MODEL = "birefnet-general-lite"  # BiRefNet (MIT) via rembg: cuts the character(s) out of the picture
-_rembg_session = None
+# The cut-out (BiRefNet via rembg) runs in tools/cutout_worker.py: in the backend the model kept gigabytes for good.
+CUTOUT_WORKER = Path(__file__).resolve().parent.parent / "tools" / "cutout_worker.py"
 
 
-def _cut_out(img):
+def _cut_out(image: Path):
     """(foreground RGBA, background RGB with the hole filled in), or None when no clear subject is found."""
-    import cv2
-    import numpy as np
-    from PIL import Image
-    from rembg import new_session, remove
+    import subprocess
+    import sys
+    import tempfile
 
-    global _rembg_session
-    if _rembg_session is None:
-        _rembg_session = new_session(PARALLAX_MODEL)
-    small = img.copy()
-    small.thumbnail((1024, 1024))
-    mask = remove(small, session=_rembg_session, only_mask=True).resize(img.size, Image.Resampling.BILINEAR)
-    m = np.asarray(mask)
-    share = (m > 128).mean()
-    if not 0.02 <= share <= 0.7:  # nothing found, or "everything is foreground": not worth layering
-        return None
-    fg = img.convert("RGBA")
-    fg.putalpha(mask)
-    # Fill the hole behind the character from its surroundings (at half size: OpenCV's inpaint is slow on big frames)
-    half = (img.width // 2, img.height // 2)
-    hole = cv2.dilate((np.asarray(mask.resize(half)) > 40).astype(np.uint8) * 255, np.ones((25, 25), np.uint8))
-    filled = cv2.inpaint(np.asarray(img.convert("RGB").resize(half)), hole, 9, cv2.INPAINT_TELEA)
-    bg = np.asarray(img.convert("RGB")).copy()
-    big_hole = np.asarray(Image.fromarray(hole).resize(img.size)) > 0
-    bg[big_hole] = np.asarray(Image.fromarray(filled).resize(img.size, Image.Resampling.BICUBIC))[big_hole]
-    return fg, Image.fromarray(bg)
+    from PIL import Image
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fg_path, bg_path = Path(tmp) / "fg.png", Path(tmp) / "bg.png"
+        done = subprocess.run([sys.executable, str(CUTOUT_WORKER), str(image), str(fg_path), str(bg_path)],
+                              capture_output=True, text=True)
+        if done.returncode == 3:
+            return None
+        if done.returncode != 0:
+            raise RuntimeError(f"parallax cut-out failed: {done.stderr[-500:]}")
+        fg, bg = Image.open(fg_path), Image.open(bg_path)
+        fg.load(), bg.load()
+        return fg, bg
 
 
 def _parallax_frames(image: Path, out_path: Path, index: int, seconds: float, size: tuple[int, int]) -> bool:
@@ -190,7 +182,7 @@ def _parallax_frames(image: Path, out_path: Path, index: int, seconds: float, si
     from PIL import Image
 
     img = Image.open(image).convert("RGB")
-    layers = _cut_out(img)
+    layers = _cut_out(image)
     if not layers:
         return False
     fg, bg = layers
