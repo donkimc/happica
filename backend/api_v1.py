@@ -295,6 +295,8 @@ class StoryRequest(BaseModel):
     characters: dict[str, str] = Field(default_factory=dict, max_length=12, description="Name → look")
     art_characters: list[str] = Field(default_factory=list, max_length=4, description="Cartoon character ids (reference art)")
     voice: str = Field(default="st-ko-F1", pattern=main.tts.VOICE_ID)
+    voice_speed: float = Field(default=1.0, ge=0.6, le=1.5,
+                               description="Narration pace: 0.9 is a calm storyteller, 1.0 normal")
     motion: str = Field(default="kenburns", pattern="^(kenburns|parallax|ltx|none)$")
     scenes: list[StoryScene] = Field(min_length=1, max_length=16)
     song: StorySong | None = None
@@ -339,7 +341,7 @@ def _story_settings(story: StoryRequest, song_track: str = "") -> main.JobReques
         song = main.SongBlock(track=track, spec=spec, placement=placement, volume=s.volume, lyrics_subtitles=s.lyrics_subtitles)
     req = main.JobRequest(
         prompt=story.title, scene_mode="script", script=script, characters=story.characters,
-        art_characters=story.art_characters, style=story.style, voice=story.voice, motion=story.motion,
+        art_characters=story.art_characters, style=story.style, voice=story.voice, voice_speed=story.voice_speed, motion=story.motion,
         narrate=any(sc.narration.strip() for sc in story.scenes), subtitles=story.subtitles, width=story.width,
         height=story.height, output_height=story.output_height, upscale=story.upscale, clip_seconds=story.clip_seconds,
         fade=story.fade, music_volume=story.music_volume, caption_style=story.caption_style, seed=story.seed, song=song,

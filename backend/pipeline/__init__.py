@@ -158,7 +158,8 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient, music_comfy:
             if not shot["narration"].strip():  # a slide without text stays silent
                 continue
             report("narration", i / len(shots))
-            speech[i] = await tts.speak(shot["narration"], settings.get("voice", "af_heart"), _paths(job_dir, i)["audio"])
+            speech[i] = await tts.speak(shot["narration"], settings.get("voice", "af_heart"), _paths(job_dir, i)["audio"],
+                                        settings.get("voice_speed", 1.0))
             result["audio"].append(_rel(job_dir, _paths(job_dir, i)["audio"]))
     result["speech"] = [round(s, 3) for s in speech]
     result["durations"] = [round(max(settings.get("clip_seconds", 3), s + LEAD + TAIL + fade if s else 0), 2) for s in speech]

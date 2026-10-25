@@ -242,6 +242,8 @@ class JobRequest(BaseModel):
     theme: str = Field(default="", max_length=500)  # what a My pictures video is about (guides AI narration)
     narrate: bool = False
     voice: str = Field(default="af_heart", pattern=tts.VOICE_ID)
+    voice_speed: float = Field(default=1.0, ge=0.6, le=1.5,
+                               description="Narration pace: 0.9 is a calm storyteller, 1.0 normal")
     subtitles: str = Field(default="burn", pattern="^(off|soft|burn)$")
     image_steps: int = Field(default=4, ge=1, le=8)
     image_model: str = Field(default="turbo", pattern="^(turbo|lightning|realvis|flux|zimage)$",
