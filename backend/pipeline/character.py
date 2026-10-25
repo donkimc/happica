@@ -43,7 +43,9 @@ def prompt_for(prompt: str, ch: dict) -> str:
     kind = ch.get("kind", "person")
     name = (ch.get("name") or "").strip()
     text = re.sub(rf"\b{re.escape(name)}\b", f"the {kind}", prompt, flags=re.I) if name else prompt
-    return f"{kind} photomaker {text}, {ch.get('look', '')}".strip(", ")
+    # several photos: the class word once per photo ("woman woman woman photomaker"), each carrying one face
+    classes = " ".join([kind] * max(1, len(ch.get("photos") or [1])))
+    return f"{classes} photomaker {text}, {ch.get('look', '')}".strip(", ")
 
 
 def mentions(prompt: str, ch: dict) -> bool:
@@ -78,7 +80,7 @@ async def run(job: dict, job_dir: Path, report, comfy: ComfyClient) -> dict:
                                    on_progress=lambda p: report("drawing the character sheet", p),
                                    art=[{"id": job["id"], **ch}] * len(prompts))
         return {"images": [str(p.relative_to(OUTPUTS_DIR)) for p in paths], "seed": seed}
-    who = f"a {ch.get('kind', 'person')} photomaker "  # the space keeps "photomaker" a word of its own
+    who = " ".join([ch.get("kind", "person")] * max(1, len(ch.get("photos") or [1]))) + " photomaker "  # word of its own
     prompts = [p.format(who=who, look=ch.get("look", "")) for p in SHEET]
     seed = random.randrange(2**32)
     paths = [job_dir / f"sheet_{i + 1}.png" for i in range(len(prompts))]

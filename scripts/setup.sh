@@ -36,6 +36,9 @@ happica:
   clip_vision: clip_vision
 EOF
 
+# Happica's own nodes (PhotoMakerEncodeMulti: characters from several photos), kept in the repo and linked in
+[ -e custom_nodes/happica_nodes ] || ln -s "$ROOT/comfy_nodes/happica_nodes" custom_nodes/happica_nodes
+
 # IP-Adapter nodes (cartoon characters from reference art)
 [ -d custom_nodes/ComfyUI_IPAdapter_plus ] || git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus custom_nodes/ComfyUI_IPAdapter_plus
 

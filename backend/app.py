@@ -524,6 +524,9 @@ class CharacterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=40, pattern=r"^[\w .'-]+$",
                       description="The name scenes use for them, e.g. Ttori")
     photo: str = Field(default="", description="A face photo (an upload) for a real person")
+    photos: list[str] = Field(default_factory=list, max_length=4,
+                              description="Or 1-4 photos of the same person (uploads): the faces are blended, which "
+                                          "usually matches the person better than one photo")
     kind: str = Field(default="person", pattern="^(woman|man|girl|boy|person|art)$",
                       description="art = a cartoon character from reference pictures (IP-Adapter); others = a real face")
     refs: list[str] = Field(default_factory=list, max_length=3, description="art: 1-3 uploaded pictures of the character")
@@ -551,9 +554,14 @@ async def create_character(req: CharacterRequest):
         return runner.submit(req.name, req.model_dump(), "character")
     if not req.consent:
         raise HTTPException(400, "Only use photos of yourself, or of people who agreed to it")
-    path = (OUTPUTS_DIR / req.photo).resolve()
-    if path.parent != UPLOADS.resolve() or not path.is_file():
+    req.photos = req.photos or ([req.photo] if req.photo else [])
+    if not req.photos:
         raise HTTPException(400, "Upload a photo first")
+    for p in req.photos:
+        path = (OUTPUTS_DIR / p).resolve()
+        if path.parent != UPLOADS.resolve() or not path.is_file():
+            raise HTTPException(400, f"Upload the photos first ({p} isn't an upload)")
+    req.photo = req.photos[0]  # the thumbnail
     return runner.submit(req.name, req.model_dump(), "character")
 
 

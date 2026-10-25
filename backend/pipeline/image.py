@@ -116,9 +116,24 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
             "model": ["ckpt", 0], "scheduler": REALVIS["scheduler"], "steps": REALVIS["steps"], "denoise": 1.0}}
     wf = {nid: node for nid, node in base.items() if nid not in PER_SCENE}
     with_face = with_face or [False] * len(prompts)
+    FACE_NODE = "PhotoMakerEncodeMulti" if isinstance(face, list) and len(face) > 1 else "PhotoMakerEncode"
     if face and any(with_face):
         wf["photomaker"] = {"class_type": "PhotoMakerLoader", "inputs": {"photomaker_model_name": "photomaker-v1.bin"}}
-        wf["face"] = {"class_type": "LoadImage", "inputs": {"image": face}}
+        faces = face if isinstance(face, list) else [face]
+        if len(faces) == 1:
+            wf["face"] = {"class_type": "LoadImage", "inputs": {"image": faces[0]}}
+        else:  # several photos of the person: one image batch for PhotoMakerEncodeMulti
+            prev = None
+            for k, name in enumerate(faces):
+                wf[f"face_load_{k}"] = {"class_type": "LoadImage", "inputs": {"image": name}}
+                wf[f"face_sq_{k}"] = {"class_type": "ImageScale", "inputs": {
+                    "image": [f"face_load_{k}", 0], "upscale_method": "lanczos", "width": 512, "height": 512, "crop": "center"}}
+                if prev is None:
+                    prev = [f"face_sq_{k}", 0]
+                else:
+                    wf[f"face_batch_{k}"] = {"class_type": "ImageBatch", "inputs": {"image1": prev, "image2": [f"face_sq_{k}", 0]}}
+                    prev = [f"face_batch_{k}", 0]
+            wf["face"] = {"class_type": "RepeatImageBatch", "inputs": {"image": prev, "amount": 1}}
         wf["sigmas_face"] = copy.deepcopy(base["sigmas"])
         if model != "realvis":  # the full model already takes 25 steps
             wf["sigmas_face"]["inputs"]["steps"] = CHARACTER_STEPS
@@ -146,7 +161,7 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
         text = f"{prompt}, {style}" if style else prompt
         if face and with_face[i]:
             start = float(settings.get("face_start", REALVIS["face_start"] if model == "realvis" else FACE_START))
-            wf[f"face_cond_{i}"] = {"class_type": "PhotoMakerEncode", "inputs": {
+            wf[f"face_cond_{i}"] = {"class_type": FACE_NODE, "inputs": {
                 "photomaker": ["photomaker", 0], "image": ["face", 0], "clip": ["ckpt", 1], "text": text}}
             wf[f"plain_cond_{i}"] = {"class_type": "CLIPTextEncode", "inputs": {
                 "clip": ["ckpt", 1], "text": text.replace(" photomaker ", " ", 1)}}
@@ -191,7 +206,7 @@ def _smooth_pass(wf: dict, branch: dict, i: int, text: str, seed: int, face: boo
     """Redraw the last part of scene i with smoothing words: a second sampler starts from the first one's result."""
     tex_text = f"{text}, {SMOOTH[0]}"
     if face:  # keep the face: the pass is conditioned on the photo too
-        wf[f"tex_cond_{i}"] = {"class_type": "PhotoMakerEncode", "inputs": {
+        wf[f"tex_cond_{i}"] = {"class_type": "PhotoMakerEncodeMulti" if "face_load_0" in wf else "PhotoMakerEncode", "inputs": {
             "photomaker": ["photomaker", 0], "image": ["face", 0], "clip": ["ckpt", 1], "text": tex_text}}
     else:
         wf[f"tex_cond_{i}"] = {"class_type": "CLIPTextEncode", "inputs": {"clip": ["ckpt", 1], "text": tex_text}}
@@ -257,7 +272,9 @@ async def generate_batch(
     names = [f"{p.parent.parent.name}_{p.stem}" for p in out_paths]
     face = None
     if character:
-        face = await comfy.upload_image(OUTPUTS_DIR / character["photo"], f"character_{Path(character['photo']).name}")
+        photos = character.get("photos") or [character["photo"]]
+        face = [await comfy.upload_image(OUTPUTS_DIR / p, f"character_{Path(p).name}") for p in photos]
+        face = face[0] if len(face) == 1 else face
         with_face = with_face if with_face is not None else [True] * n
     art_keys, art_refs = None, {}
     if art and any(art):

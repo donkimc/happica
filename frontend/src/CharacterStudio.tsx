@@ -8,6 +8,7 @@ export interface CharacterSettings {
   kind: "woman" | "man" | "girl" | "boy" | "person" | "art";
   look: string;
   refs?: string[]; // art: 1–3 pictures of the cartoon character
+  photos?: string[]; // real people: 1–4 photos of the same person (faces blended)
   style?: string;
 }
 
@@ -48,21 +49,26 @@ export default function CharacterStudio({ characters, images, upsert, remove, ac
         ) : (
         <>
         <p className="muted tight">
-          Upload one clear photo of a face. Happica learns the face and keeps it in new pictures and videos — older,
-          younger, in costume or in any scene.
+          Upload 1–4 clear photos of the same face (different angles help; eyes open). Happica learns the face and keeps
+          it in new pictures and videos — older, younger, in costume or in any scene.
         </p>
         <div className="row tight-top character-new">
           <label className="upload-button">
             <input
               type="file"
               accept="image/*,.heic,.heif"
+              multiple
+              disabled={(form.photos ?? []).length >= 4}
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
+                const files = Array.from(e.target.files ?? []).slice(0, 4 - (form.photos ?? []).length);
+                if (!files.length) return;
                 setUploading(true);
                 act(async () => {
                   try {
-                    set({ photo: (await uploadImage(file)).path });
+                    const added = [];
+                    for (const f of files) added.push((await uploadImage(f)).path);
+                    const photos = [...(form.photos ?? []), ...added];
+                    set({ photos, photo: photos[0] });
                   } finally {
                     setUploading(false);
                     e.target.value = "";
@@ -70,9 +76,14 @@ export default function CharacterStudio({ characters, images, upsert, remove, ac
                 });
               }}
             />
-            {uploading ? "Uploading…" : form.photo ? "Change photo" : "+ Upload a face photo"}
+            {uploading ? "Uploading…" : `+ Add face photos (${(form.photos ?? []).length}/4)`}
           </label>
-          {form.photo && <img className="face-preview" src={`/outputs/${form.photo}`} alt="Uploaded face" />}
+          {(form.photos ?? []).map((p) => (
+            <button key={p} className="ref-thumb" title="Remove"
+                    onClick={() => { const photos = (form.photos ?? []).filter((x) => x !== p); set({ photos, photo: photos[0] ?? "" }); }}>
+              <img className="face-preview" src={`/outputs/${p}`} alt="Uploaded face" />
+            </button>
+          ))}
         </div>
         <div className="row">
           <label>
@@ -103,7 +114,7 @@ export default function CharacterStudio({ characters, images, upsert, remove, ac
               onClick={() =>
                 act(async () => {
                   upsert(await createCharacter({ ...form, consent }));
-                  setForm({ name: "", photo: "", kind: form.kind, look: "" });
+                  setForm({ name: "", photo: "", photos: [], kind: form.kind, look: "" });
                   setConsent(false);
                 })
               }
