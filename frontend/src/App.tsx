@@ -14,6 +14,7 @@ import {
   listJobs,
   regenerateScene,
   regenerateSceneSfx,
+  uploadSceneClip,
   regenerateSound,
   rerunJob,
   watchJob,
@@ -322,6 +323,7 @@ export default function App() {
           }
           onRegenerate={(index, p) => act(async () => upsert(await regenerateScene(selected.id, index, p)))}
           onSfx={(index, cue, p) => act(async () => upsert(await regenerateSceneSfx(selected.id, index, cue, p)))}
+          onClip={(index, file) => act(async () => upsert(await uploadSceneClip(selected.id, index, file)))}
           library={musicJobs}
           sfxLibrary={sfxJobs}
           onChangeSound={(choice) => act(async () => upsert(await changeSound(selected.id, choice)))}

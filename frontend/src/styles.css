@@ -243,3 +243,4 @@ table.keys th { color: var(--muted); font-weight: 600; }
 @media (max-width: 640px) { .script .name { width: 90px; } }
 .ref-thumb { background: none; padding: 0; border: 0; cursor: pointer; }
 .change img.turnaround { width: 100%; height: auto; border-radius: 8px; display: block; }
+.upload-clip input { display: none; } .upload-clip { cursor: pointer; margin-left: 8px; } .upload-clip.disabled { opacity: 0.5; pointer-events: none; }

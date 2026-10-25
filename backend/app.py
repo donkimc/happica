@@ -3,9 +3,10 @@ import asyncio
 import io
 import shutil
 import uuid
+from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -683,6 +684,38 @@ class RegenerateRequest(BaseModel):
     motion: str | None = Field(default=None, max_length=300,
                                description="New motion text (AI motion): e.g. gentler actions after a clip went wrong")
     keep_image: bool = Field(default=False, description="Keep the picture and only animate it again (new motion seed)")
+
+
+MAX_CLIP_UPLOAD = 1024 * 1024 * 1024
+
+
+@app.post("/api/jobs/{job_id}/scenes/{index}/clip")
+async def upload_scene_clip(job_id: str, index: int, file: UploadFile = File(...),
+                            fit: str = Query("trim", pattern="^(trim|stretch)$")):
+    """Use your own video (e.g. from Kling or Hailuo) for one scene of a finished video; the story is re-assembled."""
+    job = _get_or_404(job_id)
+    _require_idle(job)
+    result = job["result"] or {}
+    if job["kind"] != "video" or not result.get("video") or not 0 <= index < len(result.get("scenes", [])):
+        raise HTTPException(400, "Only scenes of a finished video can take your clip")
+    ext = Path(file.filename or "clip.mp4").suffix.lower()
+    raw = OUTPUTS_DIR / job_id / "clips" / f"scene_{index + 1:02d}_upload{ext if ext in ('.mp4', '.mov', '.m4v', '.webm', '.mkv') else '.mp4'}"
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    size = 0
+    with raw.open("wb") as f:
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_CLIP_UPLOAD:
+                f.close(); raw.unlink()
+                raise HTTPException(413, "Clips must be under 1 GB")
+            f.write(chunk)
+    try:
+        await pipeline.upscale.probe(raw)
+    except ValueError:
+        raw.unlink()
+        raise HTTPException(400, "That file isn't a video this app can read (MP4, MOV, WebM, MKV)")
+    task = lambda j, job_dir, report: pipeline.use_uploaded_clip(j, job_dir, report, index, raw, fit)
+    return runner.enqueue(job_id, task, stage=f"scene {index + 1} clip")
 
 
 @app.post("/api/jobs/{job_id}/scenes/{index}/regenerate")

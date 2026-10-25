@@ -11,13 +11,14 @@ interface Props {
   onDelete: () => void;
   onRegenerate: (index: number, prompt: string) => void;
   onSfx: (index: number, cue: number, prompt: string) => void;
+  onClip: (index: number, file: File) => void;
   library: Job[];
   sfxLibrary: Job[];
   onChangeSound: (choice: SoundFields) => void;
   onNewAuto: (layer: "music" | "ambience") => void;
 }
 
-export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, onRegenerate, onSfx, library, sfxLibrary, onChangeSound, onNewAuto }: Props) {
+export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, onRegenerate, onSfx, onClip, library, sfxLibrary, onChangeSound, onNewAuto }: Props) {
   const active = isActive(job);
   const result = job.result;
   const settings = { ...DEFAULTS, ...job.settings } as JobSettings;
@@ -139,6 +140,7 @@ export default function JobDetail({ job, onCancel, onRerun, onEdit, onDelete, on
               sfx={result.sfx?.[i] ?? []}
               sfxDisabled={active || !result.video}
               onSfx={(k, p) => onSfx(i, k, p)}
+              onClip={result.video ? (f) => onClip(i, f) : undefined}
             />
           ))}
         </div>
@@ -169,9 +171,10 @@ interface SceneProps {
   sfx: SceneSfx[];
   sfxDisabled: boolean;
   onSfx: (cue: number, prompt: string) => void;
+  onClip?: (file: File) => void;
 }
 
-function Scene({ job, index, src, prompt, narration, disabled, onRegenerate, sfx, sfxDisabled, onSfx }: SceneProps) {
+function Scene({ job, index, src, prompt, narration, disabled, onRegenerate, sfx, sfxDisabled, onSfx, onClip }: SceneProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(prompt);
 
@@ -211,6 +214,13 @@ function Scene({ job, index, src, prompt, narration, disabled, onRegenerate, sfx
           >
             Regenerate
           </button>
+          {onClip && (
+            <label className={`link upload-clip ${disabled ? "disabled" : ""}`} title="Replace this scene with your own video (e.g. from Kling or Hailuo); trimmed to the scene's length, its sound dropped">
+              <input type="file" accept="video/*" disabled={disabled}
+                     onChange={(e) => { const f = e.target.files?.[0]; if (f) onClip(f); e.target.value = ""; }} />
+              Use my clip
+            </label>
+          )}
         </figcaption>
       )}
       {narration && narration !== prompt && <p className="narration">“{narration}”</p>}

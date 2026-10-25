@@ -331,6 +331,27 @@ async def _reanimate(job_dir: Path, settings: dict, result: dict, report, comfy:
     return result
 
 
+async def use_uploaded_clip(job: dict, job_dir: Path, report, index: int, raw: Path, fit: str = "trim") -> dict:
+    """Replace one scene's clip with an uploaded video (e.g. a hero shot made with a cloud video model): cropped to
+    the clip size, 24 fps, its own sound dropped (the story's narration, music and effects stay), and fitted to the
+    scene's length — "trim": cut, or hold the last frame if it's shorter; "stretch": sped up or slowed down."""
+    settings, result = job["settings"], dict(job["result"])
+    w, h = tuple(result.get("clip_size") or (settings["width"], settings["height"]))
+    seconds = (result.get("durations") or [settings.get("clip_seconds", 3)] * len(result["scenes"]))[index]
+    info = await upscale.probe(raw)
+    report(f"scene {index + 1}: fitting your clip", 0.0)
+    vf = f"scale={w}:{h}:force_original_aspect_ratio=increase:flags=lanczos,crop={w}:{h},fps={video.FPS},format=yuv420p"
+    if fit == "stretch" and info["duration"] > 0:
+        vf = f"setpts={seconds / info['duration']:.5f}*PTS," + vf
+    else:
+        vf += f",tpad=stop_mode=clone:stop_duration={seconds:.3f}"
+    await ffmpeg.run("-i", str(raw), "-vf", vf, "-t", f"{seconds:.3f}", "-an", *ffmpeg.ENCODE, str(_paths(job_dir, index)["clip"]))
+    result["uploaded_clips"] = {**(result.get("uploaded_clips") or {}), str(index): _rel(job_dir, raw)}
+    report("assemble", 0.0)
+    result.update(await _assemble(job_dir, settings, result, report))
+    return result
+
+
 async def _make_clip(comfy: ComfyClient, job_dir: Path, settings: dict, result: dict, i: int, prompt: str, mode: str,
                      seconds: float, seed: int, on_progress) -> Path:
     """One scene's clip. Jobs with a larger export size (result["clip_size"]) get their clips at that size:

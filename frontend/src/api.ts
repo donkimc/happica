@@ -259,6 +259,12 @@ export const rerunJob = (id: string, keepSeed = false) =>
   post(`/api/jobs/${id}/rerun`, { keep_seed: keepSeed }).then((r) => json<Job>(r));
 export const regenerateSceneSfx = (id: string, index: number, cue: number, prompt?: string) =>
   post(`/api/jobs/${id}/scenes/${index}/sfx/${cue}/regenerate`, { prompt: prompt || null }).then((r) => json<Job>(r));
+/** Use your own video for one scene of a finished video (e.g. from Kling or Hailuo); "stretch" fits its speed to the scene */
+export async function uploadSceneClip(id: string, index: number, file: File, fit: "trim" | "stretch" = "trim"): Promise<Job> {
+  const form = new FormData();
+  form.append("file", file);
+  return fetch(`/api/jobs/${id}/scenes/${index}/clip?fit=${fit}`, { method: "POST", body: form }).then((r) => json<Job>(r));
+}
 export const regenerateScene = (id: string, index: number, prompt?: string) =>
   post(`/api/jobs/${id}/scenes/${index}/regenerate`, { prompt: prompt || null }).then((r) => json<Job>(r));
 export type SoundFields = Pick<

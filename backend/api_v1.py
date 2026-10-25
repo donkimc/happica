@@ -468,6 +468,13 @@ async def regenerate_scene(job_id: str, index: int, request: Request, req: main.
     return public(await main.regenerate_scene(job_id, index, req), _base_url(request))
 
 
+@router.post("/jobs/{job_id}/scenes/{index}/clip", status_code=202,
+             summary="Use your own video for one scene (multipart `file`; fit=trim|stretch); the story is re-assembled")
+async def upload_scene_clip(job_id: str, index: int, request: Request, file: UploadFile = File(...),
+                            fit: str = Query("trim", pattern="^(trim|stretch)$")):
+    return public(await main.upload_scene_clip(job_id, index, file, fit), _base_url(request))
+
+
 @router.post("/jobs/{job_id}/scenes/{index}/sfx/{cue}/regenerate", status_code=202,
              summary="Redo one scene sound effect (another take, or a new description) and re-mix")
 async def regenerate_scene_sfx(job_id: str, index: int, cue: int, request: Request, req: main.SfxChange = main.SfxChange()):
