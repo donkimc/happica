@@ -46,6 +46,7 @@ SDXL_SIZES = [(1024, 1024), (896, 1152), (832, 1216), (768, 1344), (640, 1536), 
 def native_size(w: int, h: int) -> tuple[int, int]:
     return min(SDXL_SIZES, key=lambda s: abs(s[0] / s[1] - w / h))
 SDXL_MODELS = ("turbo", "lightning", "realvis")
+PROPORTIONS = "well-proportioned body, natural proportions"
 IPADAPTER = json.loads((WORKFLOWS_DIR / "ipadapter_t2i.json").read_text())
 ART_WEIGHT = 0.7  # IP-Adapter strength: higher copies the reference pose too, lower drifts off-model
 ART_STEPS = 6  # like PhotoMaker, the extra conditioning needs a couple more turbo steps
@@ -160,7 +161,10 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
             for key, value in node["inputs"].items():
                 if isinstance(value, list) and value[0] in PER_SCENE:
                     node["inputs"][key] = [f"{value[0]}_{i}", value[1]]
-        text = f"{prompt}, {style}" if style else prompt
+        # Lightning in tall frames: proportion words keep adults from a long torso (tested on full-body scenes;
+        # "realistic" in them pulled the style toward photos, these didn't)
+        words = PROPORTIONS if model == "lightning" and settings["height"] > settings["width"] else ""
+        text = ", ".join(x for x in (prompt, words, style) if x)
         if face and with_face[i]:
             start = float(settings.get("face_start", REALVIS["face_start"] if model == "realvis" else FACE_START))
             wf[f"face_cond_{i}"] = {"class_type": FACE_NODE, "inputs": {
