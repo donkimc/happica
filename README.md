@@ -193,6 +193,7 @@ Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves th
 | Images (FLUX.1-schnell Q5, 576×1024) | ~40 s to load, then ~4–5 min per image (4 steps at ~45–60 s); 6 scenes: 29.5 min, image ComfyUI peaks ~18 GB |
 | Images (Z-Image Turbo Q5, 576×1024) | ~4 min per image (8 steps at ~27 s); 6 scenes: 24.5 min, peak ~11 GB |
 | Images at 512×896 (the 9:16 default since 10-23) | Turbo: 3 pictures in 57 s with the model load; Z-Image: 3 in 593 s (~3.3 min each) |
+| LTX two-stage refine (tested, not used) | 384×672, the official 2× latent upscaler, 3 low-noise steps at 768×1344: 1228 s for a 3 s clip vs 282 s for 384×672 + the anime upscaler, and no clearer — softer line art. The fast path stays |
 | AI motion, 3 s scene (LTX, `ltx_short_side`) | 384 (default: 512×896 drawn at 384×672, then scaled up): ~5 min per scene, held on-model in a two-character test; `null` = full size: 18–25 min at 576×1024, steadier for hard scenes |
 | Exports (`output_height`) | Pan & zoom / parallax / still scenes drawn at the export size from Real-ESRGAN-enlarged pictures (~15 s a picture); a 3-scene 9:16 story at 1080×1920: 175 s. Near-9:16 sizes export at exactly 1080×1920 |
 | Real-person 3-view sheet with the OpenPose pose guide (xinsir SDXL ControlNet, Apache-2.0, 2.5 GB in `engine/ComfyUI/models/controlnet/`) | Turbo ~8 min, RealVisXL ~16 min; normal proportions, true side/back views |
