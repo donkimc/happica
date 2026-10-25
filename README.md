@@ -197,6 +197,7 @@ Browser ──https──► Railway "web" (frontend/Dockerfile: Caddy serves th
 | Exports (`output_height`) | Pan & zoom / parallax / still scenes drawn at the export size from Real-ESRGAN-enlarged pictures (~15 s a picture); a 3-scene 9:16 story at 1080×1920: 175 s. Near-9:16 sizes export at exactly 1080×1920 |
 | Real-person 3-view sheet with the OpenPose pose guide (xinsir SDXL ControlNet, Apache-2.0, 2.5 GB in `engine/ComfyUI/models/controlnet/`) | Turbo ~8 min, RealVisXL ~16 min; normal proportions, true side/back views |
 | Real-person character pictures, 768×768 | Turbo (face from 10%): ~35 s each; RealVisXL "Quality" (25 steps): ~106 s each, straighter and more natural faces. A face touch-up pass (redraw the face crop) was tested and dropped: +2 min a face for almost no change |
+| Full-body 9:16 scenes (512×896) | Turbo ~22 s a picture but stretches standing figures; Lightning drawn at SDXL's native 768×1344 and scaled: ~50 s, natural proportions |
 | Images (SDXL-Lightning vs Turbo, 576×1024) | the same: 6 scenes ~110 s including the model load, peak ~10 GB |
 | Story → scenes (qwen2.5:3b) | ~15 s |
 | Narration (Kokoro) | ~5–10 s per scene |

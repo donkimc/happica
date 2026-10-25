@@ -36,8 +36,10 @@ REALVIS = {"ckpt_name": "RealVisXL_V5.0_fp16.safetensors", "sampler": "dpmpp_2m"
            "cfg": 5.0, "face_start": 0.2,
            "negative": "deformed, asymmetric face, crooked eyes, cross-eyed, distorted face, bad anatomy, blurry, lowres, "
                        "extra fingers, text, watermark, long torso, elongated body, stretched body, disproportionate body"}
-# SDXL's training sizes (~1 megapixel). RealVisXL draws at the one closest to the asked shape, then the picture is
-# scaled to the asked size: drawn directly at 512×896 (below its training size) bodies come out stretched.
+# SDXL's training sizes (~1 megapixel). Lightning and RealVisXL draw at the one closest to the asked shape, then the
+# picture is scaled to the asked size: drawn directly at 512×896 (below their training size) bodies come out stretched.
+# Tested on full-body scenes: Lightning this way gives natural proportions (~50 s a picture); Turbo can't (it was
+# trained on 512×512 squares), and a pose guide fixes it only for one centred standing figure.
 SDXL_SIZES = [(1024, 1024), (896, 1152), (832, 1216), (768, 1344), (640, 1536), (1152, 896), (1216, 832), (1344, 768), (1536, 640)]
 
 
@@ -106,7 +108,7 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
         base["sampler_select"]["inputs"]["sampler_name"] = LIGHTNING["sampler"]
         base["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
             "model": ["ckpt", 0], "scheduler": LIGHTNING["scheduler"], "steps": 4, "denoise": 1.0}}
-    elif model == "realvis":
+    if model in ("lightning", "realvis"):  # drawn at SDXL's training size for the shape, then scaled to the asked size
         base["latent"]["inputs"].update(zip(("width", "height"), native_size(settings["width"], settings["height"])))
         base["ckpt"]["inputs"]["ckpt_name"] = REALVIS["ckpt_name"]
         base["negative"]["inputs"]["text"] = REALVIS["negative"]
@@ -193,7 +195,7 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
             branch[f"sampler_{i}"]["inputs"].update(positive=[f"pose_apply_{i}", 0], negative=[f"pose_apply_{i}", 1])
         if smooth:
             _smooth_pass(wf, branch, i, text, seed, face and with_face[i])
-        if model == "realvis" and native_size(settings["width"], settings["height"]) != (settings["width"], settings["height"]):
+        if model in ("lightning", "realvis") and native_size(settings["width"], settings["height"]) != (settings["width"], settings["height"]):
             wf[f"scale_{i}"] = {"class_type": "ImageScale", "inputs": {
                 "image": [f"decode_{i}", 0], "upscale_method": "lanczos", "width": settings["width"],
                 "height": settings["height"], "crop": "center"}}

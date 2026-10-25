@@ -91,7 +91,7 @@ export default function ImageStudio({ characters, jobs, health, upsert, remove, 
               onChange={(e) => set({ image_model: e.target.value as ImageModel })}
             >
               <option value="turbo">Turbo (fast; best with characters)</option>
-              <option value="lightning">Lightning (fast, cleaner scenes)</option>
+              <option value="lightning">Lightning (natural bodies, ~50 s)</option>
               <option value="realvis">RealVisXL (Quality: best real faces, ~2 min a picture)</option>
               <option value="flux" disabled={!!settings.character}>FLUX (detailed, ~5 min a picture)</option>
               <option value="zimage" disabled={!!settings.character}>Z-Image (best detail, ~4 min a picture)</option>
