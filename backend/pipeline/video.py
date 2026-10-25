@@ -6,6 +6,7 @@ none:     the still held as is (one scene of a script that mixes motions).
 ltx: AI motion with LTX-Video 2B (distilled) through ComfyUI (minutes per clip on an M2).
 """
 import copy
+import math
 import json
 from pathlib import Path
 from typing import Callable
@@ -153,6 +154,12 @@ async def ltx(comfy: ComfyClient, image: Path, prompt: str, settings: dict, out_
 # ---------- parallax: the character moves in front of the background (layered depth, no AI redrawing) ----------
 # The cut-out (BiRefNet via rembg) runs in tools/cutout_worker.py: in the backend the model kept gigabytes for good.
 CUTOUT_WORKER = Path(__file__).resolve().parent.parent / "tools" / "cutout_worker.py"
+PARALLAX_MOVES = [
+    (1.04, 1.07, 1.04, 1.12, 0.012, 0.0),   # push in
+    (1.06, 1.06, 1.06, 1.08, 0.03, 0.0),    # drift sideways
+    (1.08, 1.04, 1.13, 1.04, 0.01, 0.0),    # pull back
+    (1.05, 1.07, 1.05, 1.10, 0.0, -0.012),  # rise: the view lifts a little
+]
 
 
 def _cut_out(image: Path):
@@ -188,22 +195,26 @@ def _parallax_frames(image: Path, out_path: Path, index: int, seconds: float, si
     fg, bg = layers
     w, h = size
     frames = round(seconds * FPS)
-    direction = 1 if index % 2 == 0 else -1  # alternate drift direction between scenes
+    # Camera moves, cycled per scene: (background zoom start, end, character zoom start, end, sideways drift, rise)
+    move = PARALLAX_MOVES[index % len(PARALLAX_MOVES)]
+    direction = 1 if (index // len(PARALLAX_MOVES)) % 2 == 0 else -1  # mirror the moves on the next round
     proc = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}",
                              "-r", str(FPS), "-i", "-", *ffmpeg.ENCODE, str(out_path)], stdin=subprocess.PIPE)
 
-    def view(layer, zoom, shift_x):
-        """Crop the layer (sized like the picture) for a zoom and a horizontal shift, scaled to the frame."""
+    def view(layer, zoom, shift_x, shift_y=0.0):
+        """Crop the layer (sized like the picture) for a zoom and a shift, scaled to the frame."""
         cw, ch = img.width / zoom, img.height / zoom
         x0 = (img.width - cw) / 2 + shift_x * img.width
-        y0 = (img.height - ch) / 2
+        y0 = (img.height - ch) / 2 + shift_y * img.height
         return layer.resize((w, h), Image.Resampling.BILINEAR, box=(x0, y0, x0 + cw, y0 + ch))
 
     for k in range(frames):
         t = k / max(1, frames - 1)
         e = t * t * (3 - 2 * t)  # smoothstep
-        back = view(bg, 1.04 + 0.03 * e, direction * 0.01 * e)  # background: slow
-        front = view(fg, 1.04 + 0.08 * e, -direction * 0.015 * e)  # character: closer, so it moves more
+        bz0, bz1, fz0, fz1, drift, rise = move
+        bob = 0.003 * math.sin(2 * math.pi * k / (FPS * 1.6))  # a slow breath: the character bobs very slightly
+        back = view(bg, bz0 + (bz1 - bz0) * e, direction * drift * 0.6 * e, rise * 0.5 * e)  # background: slow
+        front = view(fg, fz0 + (fz1 - fz0) * e, -direction * drift * e, rise * e + bob)  # character: closer, moves more
         back.paste(front, (0, 0), front)
         proc.stdin.write(back.tobytes())
     proc.stdin.close()
