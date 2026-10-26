@@ -111,6 +111,7 @@ def _batch_workflow(prompts: list[str], seeds: list[int], names: list[str], sett
             "model": ["ckpt", 0], "scheduler": LIGHTNING["scheduler"], "steps": 4, "denoise": 1.0}}
     if model in ("lightning", "realvis"):  # drawn at SDXL's training size for the shape, then scaled to the asked size
         base["latent"]["inputs"].update(zip(("width", "height"), native_size(settings["width"], settings["height"])))
+    if model == "realvis":
         base["ckpt"]["inputs"]["ckpt_name"] = REALVIS["ckpt_name"]
         base["negative"]["inputs"]["text"] = REALVIS["negative"]
         base["sampler_select"]["inputs"]["sampler_name"] = REALVIS["sampler"]
